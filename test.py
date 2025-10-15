@@ -34,8 +34,8 @@ def test_embedding():
     print("-" * 50)
     
     # Dummy watermark file (not used by our embedding function)
-    dummy_watermark = "dummy.npy"
-    np.save(dummy_watermark, np.random.randint(0, 2, size=1024))
+    watermark = "mark.npy"
+
     
     # Process each image
     for i, image_file in enumerate(image_files, 1):
@@ -47,7 +47,7 @@ def test_embedding():
         
         try:
             # Apply embedding
-            watermarked_image = embedding(input_path, dummy_watermark)
+            watermarked_image = embedding(input_path, watermark)
             
             # Save watermarked image
             cv2.imwrite(output_path, watermarked_image)
@@ -66,9 +66,6 @@ def test_embedding():
             print(f"  ✗ Error processing {image_file}: {str(e)}")
             print()
     
-    # Clean up dummy file
-    if os.path.exists(dummy_watermark):
-        os.remove(dummy_watermark)
     
     print("Processing completed!")
 
