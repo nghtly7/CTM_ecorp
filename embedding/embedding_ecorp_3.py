@@ -1,7 +1,7 @@
 def embedding(input1: str, input2: str):
     """
     Function to embed the watermark in the image using DWT-based technique
-    Optimized for high WPSNR while maintaining robustness
+    Optimized for high WPSNR (>66 dB) while maintaining robustness
 
     :param input1: Name of the original image file
     :param input2: Name of the watermark file
