@@ -1,3 +1,5 @@
 images/
-watermarked_images/
-
+watermarked_images*/
+sample-images/
+attacked_images*/
+__pycache__/

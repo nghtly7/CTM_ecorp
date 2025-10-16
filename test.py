@@ -1,19 +1,19 @@
 import os
 import cv2
 import numpy as np
-from embedding.embedding_ecorp_2 import embedding
+from embedding.Ecorp_strategy import embedding
 from wpsnr import wpsnr
 
 def test_embedding():
     """Test the embedding function on all images in the images/ folder"""
     
     # Create output directory if it doesn't exist
-    output_dir = "watermarked_images"
+    output_dir = "watermarked_images_ROC"
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
     # Input directory
-    input_dir = "images"
+    input_dir = "sample-images"
     
     # Check if images directory exists
     if not os.path.exists(input_dir):

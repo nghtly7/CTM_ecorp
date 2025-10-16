@@ -1,288 +1,273 @@
-
-# Strategia Ibrida per Watermarking: Robustezza e Velocità in Ambienti a Risorse Limitate
-
-La strategia è ottimizzata per l'ambiente vincolato (3 PC, no server, no GPU) e i tempi stretti ($< 1$ secondo per detection), scartando i modelli complessi di Deep Learning (come VINE o Diffusion) per la loro irrealistica necessità di addestramento. L'approccio si basa su un metodo **ibrido "classico" ottimizzato (DCT/DFT/DWT)**, focalizzato sulla robustezza geometrica (Resizing) e sul massimo **WPSNR** (Weighted Peak Signal-to-Noise Ratio).
-
-***
-
-## 1. Strategia di Embedding (Difesa) 🛡️
-
-L'obiettivo è massimizzare il **WPSNR ($\geq 6$ punti)** e la robustezza contro gli attacchi ristretti, utilizzando un approccio **multi-dominio leggero** ma efficace.
-
-### A. Metodo Ibrido DWT-DCT-SVD (Leggero e Robusto)
-
-Si sfrutta la combinazione di robustezza alla compressione della **DCT**, l'analisi multirisoluzione della **DWT**, e la stabilità della **SVD**.
-
-1.  **DWT (Decomposizione):** Applicare la DWT a un livello sull'immagine in scala di grigi ($I_{gray}$) per ottenere le quattro bande: LL, HL, LH, HH.
-2.  **DCT (Localizzazione):** Selezionare la banda **HL** (dettagli orizzontali) o **LH** (dettagli verticali) per l'embedding. Queste bande hanno sufficiente energia per la robustezza ma non troppa per l'invisibilità.
-    * Dividere la banda scelta in blocchi $N \times N$ (es., $8 \times 8$).
-    * Applicare la DCT a ciascun blocco.
-3.  **SVD (Embedding Stabile):** Applicare la SVD ai coefficienti DCT di ciascun blocco. Il watermark **W (1024 bit)** viene incorporato nei **valori singolari ($\Sigma$)**—la firma più stabile della matrice—con un fattore di embedding $\alpha$:
-    $$\Sigma' = \Sigma + \alpha \cdot W$$
-    dove $\Sigma'$ è la matrice dei valori singolari modificati.
-
-### B. Implementazione Multipla (Redundancy e Forza)
-
-* **Ripetizione (Capacity):** Per aumentare la probabilità di recupero, il watermark di 1024 bit può essere **ripetuto** 2 o 3 volte (ad esempio, incorporando $W_{1}$ in $\text{HL}$ e $W_{2}$ in $\text{LH}$).
-* **Forza ($\alpha$) Ottimizzata (HVS):** Utilizzare l'analisi **HVS** (modellabile con la DWT) per calcolare il fattore $\alpha$ più grande possibile che mantenga il **WPSNR $\geq 6$** (6 punti). Un $\alpha$ più grande garantisce una maggiore resistenza a tutti gli attacchi.
-
-***
-
-## 2. Strategia di Detection (Obblighi e Velocità) ⏱️
-
-La funzione di detection deve essere **veloce ($< 1s$)**, **non-blind** (richiede l'immagine originale $I$), e **non deve leggere il file watermark** durante la competizione.
-
-### A. Detection: Non-Blind con Hash/Derivazione
-
-La chiave del metodo è la stabilità della SVD. Il set di valori singolari originali modificati ($\Sigma'$) o un **hash univoco** generato da essi, può essere **hard-coded** nella funzione di detection.
-
-**Procedura (Tempo Reale):**
-
-1.  Estrarre $\Sigma$ e $W'$ (il watermark estratto) con la procedura inversa della SVD e DCT/DWT sull'immagine test $I^*$.
-2.  Calcolare la similarità tra il watermark originale $W$ e quello estratto $W'$:
-    $$\text{Sim} = \text{Norm}(W, W')$$
-3.  La **Detection è fallita** se $\text{Sim} < \tau$ (dove $\tau$ è la soglia ROC) **O** se $\text{WPSNR}(I, I^*) < 5$.
-
-### B. Soglia ROC Ottimale ($\tau$)
-
-* **Calcolo Off-line:** La curva ROC deve essere eseguita **prima della competizione (entro il 27 ottobre)** su un vasto set di immagini, usando **Data Augmentation** che simuli tutti i 6 attacchi permessi.
-* **FPR Basso:** Selezionare una soglia $\tau$ che garantisca un **FPR (False Positive Rate) molto basso** ($\leq 0.1\%$). Un FPR basso è fondamentale per evitare la penalità più severa ("rilevare il watermark in immagini non marcate").
-
-***
-
-## 3. Strategia di Attacco (Aggressione Mirata) 💥
-
-L'obiettivo è distruggere il watermark mantenendo il **WPSNR $\geq 5$** per massimizzare il punteggio Quality. L'attacco deve mirare alla **sincronizzazione** e alla probabile banda di embedding (HL/LH).
-
-### A. La Combinazione "Geometrica" Critica
-
-Si predilige la combinazione di attacchi che aggrediscono la sincronizzazione e le bande di frequenza, dato che il **Resizing** è il nemico primario degli schemi DCT/DWT senza rinforzo DFT/SVD.
-
-1.  **Resizing (De-sincronizzazione):**
-    * Applicare un ridimensionamento leggero (es. $102\% \rightarrow 98\%$ o $95\% \rightarrow 105\%$).
-    * Questo attacco sposta i coefficienti di trasformata e distrugge la sincronizzazione, in particolare negli schemi DCT a blocchi.
-2.  **JPEG Compression:**
-    * Applicare un Quality Factor (QF) basso (es. **QF = 70**).
-    * Questo attacco rimuove i coefficienti di alta e media frequenza, dove il watermark DCT/DWT è tipicamente nascosto.
-3.  **Median Filtering:**
-    * Utilizzare un kernel **$3 \times 3$ o $5 \times 5$**.
-    * Il filtro mediano rimuove il rumore (AWGN) e le micro-modifiche lasciate dal watermark e da altri attacchi, contrastando efficacemente i pattern pseudo-casuali.
-
-### B. Logistica e Velocità
-
-* **Codice Semplice:** Il codice di attacco deve essere una **semplice pipeline di funzioni di OpenCV** (come richiesto) per garantire esecuzione rapida e affidabile con risorse limitate.
-* **Log di Attacco:** Registrare con cura l'attacco con il **WPSNR più alto** tra quelli che hanno successo (watermark distrutto) per massimizzare il punteggio di Quality.
-
-# Grey areas 
-Sì, le regole della challenge presentano diverse "grey area" (aree grigie) che, se sfruttate strategicamente, possono offrire un vantaggio competitivo, specialmente in un contesto di risorse limitate e vincoli di tempo.
-
-Ecco le principali aree grigie e le strategie per sfruttarle:
+# Algoritmo finale — DWT + DCT + Spread-Spectrum + Fourier–Mellin
 
 ---
 
-## 1. Ambito degli Attacchi 💥 (Il Vantaggio dell'Attaccante)
+## Sommario
 
-### ⚪ Il *Resizing* come Attacco Geometrico Senza Dati Originali
-* [cite_start]**La Regola:** Gli attacchi ammessi includono il **Resizing**[cite: 151]. [cite_start]**NON** è consentito usare l'immagine originale per *localizzare* gli attacchi[cite: 64, 153].
-* **L'Area Grigia:** Il *resizing* è l'unico attacco che agisce sulla **sincronizzazione** (geometria) dell'immagine. [cite_start]Sebbene non si possa usare l'originale per *localizzare* il watermark, un attacco di *resizing* (ad esempio, $512 \times 512 \to 500 \times 500 \to 512 \times 512$) **non richiede localizzazione**[cite: 151]. [cite_start]È un attacco globale di de-sincronizzazione[cite: 151]. Molti schemi DCT/DWT classici sono vulnerabili a questo, e non richiede il calcolo di feature complesse.
-* **Sfruttamento:** Applicare il *resizing* come primo e più efficace attacco generico. È l'unica opzione geometrica e distrugge la base su cui si poggiano molte implementazioni DCT a blocchi (non invarianti).
+Algoritmo ibrido per watermarking robusto e veloce, composto da:
 
-### ⚪ L'Attacco Misto con *Sharpening*
-* [cite_start]**La Regola:** Gli attacchi ammessi includono lo **Sharpening** (nitidezza)[cite: 149].
-* **L'Area Grigia:** Lo *sharpening* è un filtro che enfatizza le alte frequenze. Se combinato con la **Compressione JPEG** (che rimuove le alte frequenze), l'effetto combinato è ambiguo. Può essere usato per **migliorare il WPSNR** dell'immagine attaccata se il watermark aveva leggermente appiattito i dettagli, **oppure** per degradare ulteriormente i coefficienti di alta frequenza usati da schemi deboli di *watermarking*.
-* [cite_start]**Sfruttamento:** Usare lo *sharpening* come filtro finale di bilanciamento per aumentare il WPSNR **vicino alla soglia di 35 dB** dopo un attacco distruttivo (es. JPEG QF 70 + Resizing), massimizzando così il punteggio di *Quality*[cite: 183].
+* Embedding: DWT(2) → DCT(8×8) mid-freq spread-spectrum + ECC + pilot tones + repliche
+* Detection: riallineamento Fourier–Mellin (log-polar + phase correlation) → estrazione DWT/DCT → majority + ECC → decisione
+* Fallback gerarchico (brute-force non riallineato → ORB limitato) con timeouts per rispettare `<= 5s`.
+* `state.pkl` leggero con template e parametri necessari.
 
 ---
 
-## 2. Definizione di Successo e Fallimento (Il Vantaggio della Difesa)
+## File / API richiesti (convenzioni)
 
-### ⚪ Assenza di Dati Originali nella Detection
-* [cite_start]**La Regola:** Il codice di *detection* (`detection (input1, input2, input3)`) prende in input l'immagine originale (`input1`), *watermarked* (`input2`), e attaccata (`input3`)[cite: 128, 129, 130]. [cite_start]**NON** deve leggere il file del watermark originale, ma deve estrarre il watermark[cite: 138].
-* [cite_start]**L'Area Grigia:** Poiché il codice non deve leggere il file watermark, il modo più semplice è usare il **watermark estratto da `input2`** ($W_{extracted}$ da $I_{watermarked}$) come **referenza** contro cui confrontare $W_{attacked}$ estratto da `input3`[cite: 133]. **Non c'è un requisito esplicito che $I_{original}$ (`input1`) sia indispensabile** nell'algoritmo di detection, a meno che non si stia usando una strategia non-blind pura.
-* **Sfruttamento:** Semplificare il codice di *detection* al massimo, concentrandosi sull'estrazione da `input2` e `input3`. [cite_start]Il limite di **5 secondi** [cite: 141] è severo; minimizzare i calcoli (escludendo se possibile il coinvolgimento di `input1` nel calcolo del watermark) è cruciale per la velocità.
+* `embedding(input1, input2) -> output1`
 
-### ⚪ La Tolleranza di Robustezza (La Trappola)
-* [cite_start]**La Regola:** Un attacco è fallito se il watermark è presente ($sim \ge \tau$) **O** se il WPSNR è $< 35 \text{ dB}$[cite: 140].
-* [cite_start]**L'Area Grigia:** L'obiettivo di punteggio *Robustezza* dà **6 punti** se la WPSNR media dell'immagine attaccata con successo è **$< 38 \text{ dB}$**[cite: 179].
-* **Sfruttamento:** Progettare l'embedding per essere robusto fino a **$37.9 \text{ dB}$**. Costringendo l'attaccante a spingere l'attacco al punto di distruggere il watermark esattamente a $37.9 \text{ dB}$, si ottiene la massima robustezza (6 punti) e si rende estremamente difficile per l'attaccante raggiungere il punteggio *Quality* (che richiede WPSNR > AVG, che sarà probabilmente sopra i $40 \text{ dB}$). L'attaccante ha una finestra di manovra molto piccola tra i 35 dB e il punto di rottura.
+  * `input1`: path immagine originale BMP (512×512 grayscale)
+  * `input2`: path watermark binario (file con 1024 bit)
+  * `output1`: salva immagine watermarked con nome `groupname imageName.bmp`
+  * Non stampare nulla, non aprire GUI.
+* `detection(input1, input2, input3) -> output1, output2`
 
----
-
-## 3. Vincoli di Sottomissione e Codice (Il Vantaggio Logistico)
-
-### ⚪ Fine-Tuning e Sottomissione Tardi
-* [cite_start]**La Regola:** Dopo la deadline del 27 ottobre, è concesso solo il **Fine-Tuning** (regolazione di parametri e posizioni di *embedding*)[cite: 36, 37, 83].
-* [cite_start]**L'Area Grigia:** Non c'è una definizione rigida di "embedding location" o "parameter"[cite: 37].
-* **Sfruttamento:** Sottomettere il codice il 27 ottobre con l'architettura completa, ma con parametri di embedding $\alpha$ (forza) e soglia $\tau$ (detection) che sono **visibilmente ottimizzabili**. Questo permette di "salvare" i miglioramenti di robustezza scoperti all'ultimo minuto da applicare il 3 novembre, come la forza $\alpha$ necessaria per raggiungere esattamente WPSNR $66 \text{ dB}$ o la soglia $\tau$ ottimale.
-
-### ⚪ Tempo di Esecuzione e Test
-* [cite_start]**La Regola:** Il codice di *detection* deve completare l'esecuzione in $\le 5$ secondi[cite: 141, 195].
-* [cite_start]**L'Area Grigia:** Non è specificato il tempo limite per la funzione di *embedding* e *attack*[cite: 141, 195].
-* **Sfruttamento:** L'embedding e l'attacco possono essere più complessi (es. DWT-DCT-SVD per l'embedding), dato che il vincolo di 5 secondi si applica **solo alla *detection***. Concentrare gli sforzi di ottimizzazione della velocità solo su quella funzione (ad esempio pre-calcolando lookup tables o riducendo i loop di SVD/DWT/DCT).
-
-
-Ottimo — grazie per il testo di Gemini. Farò una **revisione critica puntuale**: prima elenco cosa di quello che ha scritto è **corretto/utile**, poi cosa è **sbagliato/inaspettato o pericoloso** per la gara, e infine propongo **strategie alternative concrete e coerenti con le regole** (con parametri e ottimizzazioni pratiche). Cerco di essere diretto e operativo: niente fronzoli, solo quello che conta per vincere la challenge.
-
----
-# ChatGPT opinion
-# 1) Cosa va bene / è plausibile nel testo di Gemini
-
-* **Scelta di rifiutare modelli DL pesanti**: corretta. GPU/tempo/risorse non lo giustificano e il regolamento non lo richiede.
-* **Idea di usare un approccio ibrido (DWT/DCT/SVD)**: sensata a livello concettuale — combinare domini spesso migliora la robustezza contro attacchi diversi.
-* **Ridondanza e multi-embedding** (ripetere il payload su più bande) e uso di **HVS/masking**: ottime pratiche per avere WPSNR alto e resistenza.
-* **Sottolineatura della necessità di ROC e soglia calcolata off-line**: correttissimo e richiesto dal regolamento.
-* **Notare che resizing è una minaccia importante per schemi basati su blocchi**: corretto, il resizing rompe sincronizzazione dei blocchi 8×8.
+  * `input1`: path immagine originale (per calcolo WPSNR)
+  * `input2`: path immagine watermarked (usata come riferimento)
+  * `input3`: path immagine attaccata (da verificare)
+  * `output1`: 1 se watermark presente, 0 altrimenti
+  * `output2`: WPSNR(watermarked, attacked) (float)
 
 ---
 
-# 2) Cosa è sbagliato, fuorviante o rischioso (critiche precise)
+## Struttura `state.pkl` (salvare al termine di embedding)
 
-1. **Tempo di detection: “<1 s”**
-
-   * Gemini insiste su un requisito di `<1s`. Il regolamento richiede che la detection completi **entro 5 secondi**. Puntare a <1s è ambizioso ma non richiesto; peggio: alcune proposte nel testo (SVD per ogni blocco) rendono difficile rispettare anche i 5s. Corretto: puntare a **≤5 s**, ottimizzando per quello.
-
-2. **Confusione sui WPSNR / punti**
-
-   * Gemini parla di “WPSNR (≥6 punti)” e in vari punti usa soglie sbagliate (es. “WPSNR ≥ 5” — probabilmente intendeva dB ma scritto male). Il file ufficiale usa soglie in **dB** (es. WPSNR ≥ 66 dB dà 6 punti per embedding). Inoltre la condizione per considerare un attacco valido è **WPSNR ≥ 35 dB** (non 5). Bisogna usare numeri esatti.
-
-3. **Uso non chiaro dell’input originale nella detection**
-
-   * Gemini suggerisce che `input1` (originale) potrebbe non essere necessario e che si può confrontare `input2` vs `input3` (estratto da watermarked vs attacked). Il regolamento permette il confronto tra watermark estratto da watermarked e attacked — ma la detection **DEVE** ricevere i tre input e può usare `input1` per calcolare WPSNR. È **consentito** estrarre il riferimento da `input2` (watermarked) e confrontarlo con `input3`. Attenzione: non si può leggere il file watermark originale, ma si può **derivare** o **hashare** valori dalla watermarked image. Quindi la frase di Gemini andava chiarita: non è una "area grigia", è permesso usare `input2` come riferimento ma il detection deve comunque completare entro i limiti e non leggere file esterni.
-
-4. **SVD applicato ai valori singolari di ciascun blocco (Σ' = Σ + α W)** — **problematico**:
-
-   * Tecnica teoricamente usabile, ma **praticamente difficile**:
-
-     * I blocchi 8×8 hanno matrici piccole: SVD su ciascun blocco è costoso e i valori singolari di blocchi piccoli sono **instabili** sotto JPEG/resizing/median.
-     * Aggiungere 1024 bit direttamente ai valori singolari richiede **moltissimi blocchi**, mappatura complessa e ridondanza elevata.
-     * Eseguire SVD su (512×512)/64 = 4096 blocchi, per più bande e ripetizioni, è **computazionalmente pesante** e rischia di non rientrare nei 5s in detection (o generare WPSNR cattiva se α alto).
-   * Conclusione: **SVD su blocchi piccoli è una scelta rischiosa**. Se si usa SVD, meglio applicarla su matrici più grandi (intere subband DWT o patch grandi), o usare versioni approssimate (randomized SVD) ma sempre valutare costo/beneficio.
-
-5. **Richiesta di FPR ≤ 0.1%**
-
-   * Gemini suggerisce FPR estremamente basso (0.1%). Il regolamento chiede di scegliere τ corrispondente a **FPR ∈ [0, 0.1]** — interpretazione ragionevole: 0–0.1 **frazione** = 0–10% (non 0.1%!). Quindi la soglia scelta può essere fino al 10% FPR, non è richiesto 0.1%. Impostare FPR troppo basso peggiora la sensibilità (ossia aumenta i false negatives).
-
-6. **Claim che resizing non richiede localizzazione** ma viene chiamata “area grigia”
-
-   * È vero che resizing è globale e non richiede conoscenza dell’originale. Ma non è un “trucco di regole” — è semplicemente un attacco valido e noto. Non è una scappatoia: la difesa deve prevederlo (sincronizzazione/anchor). Presentarlo come area grigia è fuorviante.
-
-7. **Affermare che si può “salvare” parametri dopo il 27 ottobre**
-
-   * Le regole permettono solo fine-tuning. Non c’è un modo magico per “salvare” architettura completa e poi cambiare strutturalmente il metodo. Se sottoponi un’architettura che richiede dipendenze o binary hidden, rischi penalità. Non sfruttare “ambiguità” qui: rispetta la regola e invia codice eseguibile completo e funzionante.
+```text
+{
+  "LP_ref": np.float32 array (360,200),   # log-polar magnitude template
+  "M_embed": np.bool array,               # mappa posizioni embedding (index map)
+  "seed": int,                            # PRNG seed
+  "ecc_params": dict,                     # {type, n, k, t}
+  "alpha_matrix": np.float32 array (8,8), # α(u,v) HVS matrix per DCT coefficients
+  "tau": float                            # soglia τ scelta via ROC
+}
+```
 
 ---
 
-# 3) Strategie alternative concrete e coerenti con le regole (pratiche, rapide, robuste)
+# Parametri raccomandati (base, da tarare)
 
-Qui propongo **un piano alternativo** (implementabile con OpenCV+NumPy, rispettoso dei limiti computazionali, robusto agli attacchi permessi e veloce nella detection).
-
-## Strategia raccomandata (sintesi)
-
-**Primary:** DCT spread-spectrum su coefficienti mid-frequency di DCT 8×8 con masking HVS.
-**Secondary:** DWT multi-scale (2 livelli) embedding leggero sulle bande medie/basse.
-**Anchor:** ~150 ORB keypoints per immagine per repliche locali (resilienza a resize).
-**Sync:** Piccolo pilot grid (template) in basse frequenze per ri-allineamento (debole, distribuito).
-**ECC:** Reed-Solomon o BCH (es. RS(2047,1024) o BCH con t≈100 bit) per recuperare da bit mancanti.
-**Detection:** correlazione normalizzata + confronto tra estrazioni da `input2` e `input3` + WPSNR calcolato con `input1`. Ottimizzare in NumPy (nessun SVD per blocco).
-
-### Perché questa combinazione
-
-* Spread-spectrum DCT è **robusto a JPEG, AWGN e sharpening**.
-* DWT multi-scale offre resistenza a blur/resize (se si mette ridondanza su scale più basse).
-* ORB anchor aiuta a ritrovare regioni dopo resize (feature-based re-alignment).
-* ECC consente di ricostruire il payload anche con bit corrotti.
-* Nessuna SVD blocco-per-blocco (quindi detection veloce).
+* Wavelet: **biorthogonal 9/7** — livelli DWT = **2**
+* DCT block: **8×8**
+* Zigzag mid-freq positions: **10–30** (o indici 2–4 in u/v)
+* Replica factor (coeff/bit): **R = 16 ÷ 32**
+* Alpha base: **α0 = 0.008** ; alpha_matrix con β ≈ 0.6 (vedi HVS)
+* ECC: **BCH** o **Reed-Solomon** con ridondanza ≈ **30%**
+* LP_ref size: **360×200** (log-polar remap)
+* Pilot tone amplitude: **0.6 (scaled)**
+* τ (threshold) via ROC: target FPR 1–5% → iniziale τ ≈ **0.85–0.9**
+* Detection time target: **< 5 s** (tipico 1.5–3 s)
 
 ---
 
-## Implementazione: dettagli e parametri consigliati
+# ALGORITMO — Dettaglio operativo
 
-### Embedding (workflow)
+## 1) EMBEDDING (funzione `embedding(input1,input2)`)
 
-1. **Preprocess**: normalizza immagine 512×512 grigio (float32).
-2. **ECC**: codifica 1024 bit con RS o BCH → ottieni `payload_bits` di lunghezza n.
-3. **DCT layer**:
+### Step descrittivi
 
-   * Divide immagine in blocchi 8×8. Per ogni blocco:
+1. **Carica** `I_orig` (512×512 grayscale), converti a `float32` in [0,1].
+2. **Pre-window**: applica finestra 2D Hanning per ridurre leakage FFT.
+3. **Pilot tones**: inietti 4–6 piccoli segnali a bassa frequenza (bassa magnitudine) su posizioni predefinite nelle basse bande (usati per check rapido).
+4. **DWT level 2**: calcola DWT (biorthogonal 9/7) → estrai LH2, HL2 (target bands).
+5. **Per ogni subband target**:
 
-     * Applica DCT 2D.
-     * Seleziona indici zigzag pos 10–30 (mid-freq).
-     * Per ogni bit (sequenza PRNG con seed segreto) applica: `c' = c + α * s`, con `s∈{+1,-1}` pseudo-random per bit.
-   * α iniziale: **4.0** (testare e aumentare fino a WPSNR target).
-4. **DWT layer**:
+   * Se necessario rimappa dimensione per essere multipla di 8.
+   * Dividi in blocchi 8×8 e applica DCT2 (batch vectorizzato).
+   * Costruisci `M_embed` (mappa posizioni dei coefficienti selezionati in ogni blocco).
+6. **Watermark + ECC**:
 
-   * Applica DWT livello 2 (Haar o db2).
-   * Scegli bande medie (LH1/LH2 o HL1) per inserire una versione ridotta del payload con QIM: quant-step q∈{4,6}.
-5. **ORB anchor**:
+   * Leggi i 1024 bit `W_bin`.
+   * Applica ECC → ottieni `payload_bits` (N_payload).
+   * PRNG = `RandomState(seed)` con `seed = SHA256(group_password)` (o generato casualmente e salvato).
+   * Permuta `payload_bits` con PRNG e mappa ogni bit su `R` coefficienti secondo `M_embed`.
+7. **Spread-spectrum insertion**:
 
-   * Estrai ~150 ORB keypoints su immagine originale.
-   * Per i keypoints più stabili, crea piccole patch (32×32) e aplica uno spread-spectrum locale nei coefficienti DCT della patch (α_local = 6 per patch).
-6. **Sync template**:
+   * Per ogni coeff selezionato: `c' = c + α(u,v) * s * bit`, dove:
 
-   * Inietta un debole pattern sinusoidale a bassa ampiezza su bassa frequenza (es. tre toni a frequenze radiali) per permettere detection di errore di scala/traslazione minima. Ampiezza molto bassa per non abbassare WPSNR.
-7. **Final check**: calcola WPSNR rispetto originale; se < 35 dB rivedi α o la distribuzione.
+     * `s` ∈ {+1, −1} pseudo-random per coeff (dalla stessa PRNG)
+     * `α(u,v)` è tratto da `alpha_matrix` (8×8) scalata dalla luminanza locale (masking HVS).
+8. **Repliche**: ripeti embedding su HL2 e LH2 (o su HL1/LH1 e HL2/LH2) per ridondanza.
+9. **Inverse DCT / Inverse DWT** → ricostruisci immagine. Clip in [0,1] → converti uint8.
+10. **Calcola WPSNR(I_orig, I_wm)** → se < 35 dB (fallimento) abbassa `α` o repliche; target ideale 54–66 dB (tarare).
+11. **Calcola LP_ref**:
 
-### Detection (veloce e conforme)
+    * FFT magnitude di `I_wm`, `mag = log(1 + |FFT|)`, applica bandpass su bande medie, remap log-polar → `LP_ref`.
+12. **Salva `state.pkl`** contenente `LP_ref`, `M_embed`, `seed`, `ecc_params`, `alpha_matrix`, `tau` (tau da ROC / test).
+13. **Salva file `groupname imageName.bmp`** (output1).
 
-1. **Input**: detection(input1, input2, input3) — leggi le 3 immagini. Calcola WPSNR(watermarked, attacked) da `input2` e `input3`.
-2. **Estrai riferimento**: estrai `payload_ref` da `input2` (stesso processo di estrazione: DWT+DCT local + ORB patches).
-3. **Estrai attaccato**: estrai `payload_att` da `input3`.
-4. **Decodifica ECC**: tenta la correzione. Calcola percentuale bit uguali.
-5. **Similitudine**: `sim = corr(payload_ref, payload_att)` oppure Hamming distance dopo ECC.
-6. **Decisione**: se `sim >= τ` → watermark presente (output1=1), altrimenti 0. Inoltre output2 = WPSNR(`input2`,`input3`).
+### Note implementative
 
-   * τ scelto off-line tramite ROC con FPR nel range [0,0.1] (0–10%). **Non** fissare 0.1% come Gemini suggeriva.
-
-**Ottimizzazioni per velocità (necessarie per ≤5s)**:
-
-* Vectorizza trasformate: usa `scipy.fftpack.dct` su tutta la immagine a blocchi tramite reshape (evitare loop Python).
-* Evita SVD per blocco: SVD solo su subband globale se strettamente necessario.
-* Precalcola maschere e indici e caricale come costanti.
-* Limitare numero di keypoint patches a 100–150 per immagine (estrazione ORB è veloce).
+* Vectorizza DCT su array (reshape (nblocks,8,8) → dct2 per blocco).
+* Calibrare `alpha_matrix` usando mappa di varianza locale: aree con maggior varianza → `α` maggiore.
+* Non stampare o aprire finestre.
 
 ---
 
-## Difesa contro resizing (la minaccia principale)
+## 2) DETECTION (funzione `detection(input1,input2,input3)`)
 
-* **Anchor features (ORB)**: usale come punti di replica; in detection cerca corrispondenze e ri-allinea le patch tramite similitudine affina (estimare scala e traslazione grossolana usando orb+RANSAC).
-* **Pilot tones a basse frequenze**: per stimare shift/scale globale via phase correlation su subband a bassa frequenza.
-* **Inserisci ridondanza del payload su scale basse DWT**: anche se blur/median eliminano certe componenti, le scale basse rimangono.
+### Obiettivi
+
+* Riallineare `input3` a `input2` tramite Fourier–Mellin (principale), poi estrarre e confrontare watermark.
+* Gerarchia fallback: (1) Fourier–Mellin, (2) estrazione non riallineata rapida, (3) ORB limitato (ultimo tentativo con timeout).
+
+### Pipeline (procedura)
+
+1. **Carica** `I_orig`, `I_wm` (input2), `I_att` (input3).
+2. **Carica `state.pkl`** (LP_ref, M_embed, seed, ecc_params, alpha_matrix, tau).
+3. **Riallineamento (Fourier–Mellin)**:
+
+   * `mag_att = log(1 + |FFT(I_att * Hanning)|)`
+   * Remap `LP_att = logpolar(mag_att, center)` (stesse dimensioni LP_ref).
+   * `shift = phase_correlation(LP_ref, LP_att)` → ottieni `(dx, dy)` → stima `scale, rotation`.
+   * Se peak_corr ≥ `corr_threshold` (es. 0.30) → applica inverse scaling/rotation su `I_att` → `I_aligned`.
+   * ELSE → go to Step 4 (tentativo rapida senza riallineamento).
+4. **Estrazione rapida (senza riallineamento)**:
+
+   * Applica DWT(2) a `I_att`, DCT 8×8, recupera coefficienti secondo `M_embed`, calcola correlazioni col PRNG `P`.
+   * Majority decode + ECC decode → se `sim ≥ tau_fast` (es. 0.7) → decisione positiva (return 1, WPSNR).
+   * ELSE → go to Step 5.
+5. **Fallback ORB (ultimo tentativo)**:
+
+   * Start timer; timeout hard = 1.0 s (o ciò che rimane prima di 5 s).
+   * Extract ORB keypoints limiting to **N=50** top responses.
+   * Match `I_wm` ↔ `I_att`, RANSAC (max_iter 500) per stimare affin transform; se match ok → warp `I_att` → `I_aligned_orb`.
+   * Se timeout o failed → **return** `output1 = 0, output2 = WPSNR(I_wm, I_att)` (no watermark).
+6. **Estrarre watermark dall’immagine riallineata** (`I_aligned` o `I_aligned_orb`):
+
+   * DWT(2) → DCT 8×8 → estrae coeff via `M_embed`.
+   * Per ogni bit: correlazione con `P` → voto (+/-).
+   * Majority vote tra repliche (LH2 vs HL2).
+   * ECC decode → ottieni `W_extracted`.
+7. **Calcola similarità**:
+
+   * `sim = normalized_correlation(W_ref, W_extracted)` (dot / norms).
+   * Se `sim >= tau` (tau da ROC) **AND** `wpsnr(I_wm, I_att) >= 35 dB` → `output1 = 1` (watermark presente).
+   * Altrimenti `output1 = 0`.
+8. **Output**:
+
+   * `output1` (0/1), `output2` = WPSNR(I_wm, I_att).
+
+### Timing e robustezza
+
+* Fourier–Mellin + estrazione vectorizzata → tipico < 2 s su CPU moderne.
+* Fallback ORB limitato aggiunge fino a ~1 s, ma è eseguito solo raramente.
+* Timeout assoluto: non superare 5 s, preferibile restituire 0 piuttosto che superare il limite.
 
 ---
 
-## Contromisure all’attacco “resizing + JPEG + median” suggerito da Gemini
+## 3) TESTING & ROC (procedura da eseguire offline)
 
-* Gli attacchi misti proposti (resize → JPEG QF70 → median → sharpen) sono efficaci contro schemi deboli DCT-only. Contromisura:
+1. **Dataset**: 30–50 immagini naturali 512×512. Per ogni immagine: genera `I_wm`.
+2. **Attacchi** (range):
 
-  * mettere più ridondanza sulle bande basse (DWT), usare anchor ORB per riallineamento, e usare ECC forte.
-  * attenzione a non aumentare α eccessivamente (riduce WPSNR).
-
----
-
-# 4) Checklist pratica e priorità di sviluppo (per il tuo gruppo)
-
-1. **Implementare prototype DCT spread-spectrum** (embedding + extraction) — test baseline.
-2. **Aggiungere ECC** e valutare ROC su dataset sintetico con attacchi predefiniti.
-3. **Aggiungere DWT multi-scale** (secondo layer) e verificare extra robustezza vs blur/resize.
-4. **Aggiungere ORB anchors** per resync (test resize 0.5–1.5).
-5. **Ottimizzare detection** per essere <5s (vectorize, ridurre SVD).
-6. **Generare ROC e scegliere τ** (FPR tra 0% e 10%; preferire 1–5% per bilanciamento).
-7. **Test largo**: AWGN σ∈{2,4,8}, JPEG QF∈{50,70,90}, median 3/5/7, resize {0.5,0.75,1.5} + ritorno alla 512, blur σ∈{0.5,1,2}.
+   * AWGN σ ∈ {2,4,8,12}
+   * JPEG QF ∈ {30,50,70,90}
+   * Median k ∈ {3,5,7}
+   * Resize scales ∈ {0.5, 0.75, 0.9, 1.1, 1.5} (resize+reinterp back to 512)
+   * Blur σ ∈ {0.5,1,2}
+   * Sharpen: weak→strong kernels
+3. **Per ogni attacco**: estrae `sim` e label (1 = watermark presente, 0 = random watermark).
+4. **Genera ROC**, scegli `tau` nel range che produce **FPR 1–5%** (tradeoff robustezza vs falsi positivi).
+5. Imposta `tau` e salva in `state.pkl`.
 
 ---
 
-# 5) Conclusione sintetica (cosa accettare di Gemini e cosa cambiare subito)
+## 4) Suggerimenti pratici di implementazione
 
-* **Accetta**: approccio ibrido, ridondanza, fine-tuning via ROC, attenzione a resizing.
-* **Cambia/Substituisci**: evita SVD su blocchi 8×8 come meccanismo principale; non inseguire FPR 0.1% (troppo stringente); non assumere requisito <1s per detection; non confondere le soglie WPSNR (usa le soglie del regolamento: 35 dB min per considerare attacco valido, ecc.).
-* **Sostituzione pratica**: uso DCT spread-spectrum + DWT + ORB anchors + ECC + sync pilot è una soluzione più pratica, rapida ed efficace rispetto alla DWT-DCT-SVD per blocco.
+* **Vectorizzazione**: evitare loop Python su pixel/blocchi; usare reshape e funzioni DCT batch (`scipy.fftpack.dct` o `cv2.dct` su patches).
+* **FFT**: usare `numpy.fft` o `pyfftw` per velocità; applica Hanning window 2D prima di FFT.
+* **Log-polar**: usa `cv2.logPolar` (OpenCV) o implementazione equivalente con anti-aliasing.
+* **ECC**: usare libreria consolidata (e.g. `pyfinite` o `reedsolo`); testare robustezza e velocità.
+* **Profiling**: misurare tempi con `time.perf_counter()` e tracciare percentili sul dataset.
+* **Logging**: salva seed, alpha_matrix, parametri ECC e ROC τ in `state.pkl` (no immagini).
+* **WPSNR**: implementa la funzione con la stessa definizione usata in laboratorio (usare WPSNR fornita).
 
 ---
 
-Se vuoi, procedo subito con **una cosa pratica** (scegli una sola opzione e la faccio subito nel mio prossimo messaggio — non posso lavorare in background):
+## 5) Pseudocodice essenziale
 
-1. Boilerplate Python minimal (embedding/detection skeleton) che implementa **DCT spread-spectrum + ECC + ROC test harness**; o
-2. Script di test che genera dataset, applica attacchi permessi (AWGN, JPEG, median, resize, blur, sharpen) e costruisce la ROC per scegliere τ; o
-3. Codice di detection altamente ottimizzato (senza SVD) che rispetta i 5s e usa estrazione correlazionale.
+### Embedding (schematic)
 
-Dimmi quale preferisci e te lo preparo immediatamente.
+```python
+def embedding(input1, input2):
+    I = load_image(input1)                 # float32 0..1
+    W = load_watermark_bits(input2)        # 1024 bits
+    # pre-window
+    I_win = apply_hanning(I)
+    # DWT level2
+    coeffs = dwt2(I_win, wavelet='bior9.7', level=2)
+    LH2, HL2 = coeffs['LH2'], coeffs['HL2']
+    # DCT 8x8 on LH2 and HL2, build M_embed
+    D_LH = block_dct(LH2)
+    D_HL = block_dct(HL2)
+    # ECC encode + PRNG
+    payload = ecc_encode(W)
+    prng = RandomState(seed)
+    payload_perm = prng.permutation(payload)
+    # Insert spread-spectrum
+    for subband in [D_LH, D_HL]:
+        for bit_index, bit in enumerate(payload_perm):
+            positions = select_R_positions(M_embed, prng, bit_index)
+            for pos in positions:
+                u,v = pos
+                s = prng.choice([-1,1])
+                subband[u,v] += alpha_matrix[u%8, v%8] * s * (1 if bit else -1)
+    # inverse transforms
+    LH2_mod = inverse_block_dct(D_LH)
+    HL2_mod = inverse_block_dct(D_HL)
+    coeffs['LH2'] = LH2_mod; coeffs['HL2'] = HL2_mod
+    I_wm = idwt2(coeffs)
+    I_wm = clip_uint8(I_wm)
+    # LP_ref compute
+    LP_ref = compute_logpolar_fft(I_wm)
+    save_state('state.pkl', LP_ref, M_embed, seed, ecc_params, alpha_matrix, tau)
+    save_image('groupname imageName.bmp', I_wm)
+    return 'groupname imageName.bmp'
+```
+
+### Detection (schematic)
+
+```python
+def detection(input1, input2, input3):
+    I_orig = load_image(input1)
+    I_wm = load_image(input2)
+    I_att = load_image(input3)
+    state = load_state('state.pkl')
+    # 1) Fourier-Mellin alignment
+    LP_att = compute_logpolar_fft(I_att)
+    dx, dy, peak = phase_correlation(state['LP_ref'], LP_att)
+    if peak >= corr_thresh:
+        scale, theta = decode_scale_rotation(dx, dy)
+        I_aligned = warp_image(I_att, scale=scale, rot=theta)
+    else:
+        # 2) quick non-aligned attempt
+        sim_quick = quick_extract_and_compare(I_att, state)
+        if sim_quick >= tau_quick:
+            return 1, compute_wpsnr(I_wm, I_att)
+        # 3) fallback ORB limited with timeout
+        I_aligned = orb_ransac_align(I_wm, I_att, timeout=1.0)
+        if I_aligned is None:
+            return 0, compute_wpsnr(I_wm, I_att)
+    # 4) Extract watermark from I_aligned
+    W_ex = extract_payload(I_aligned, state)
+    sim = normalized_corr(state['W_ref'], W_ex)
+    wpsnr = compute_wpsnr(I_wm, I_att)
+    decision = 1 if (sim >= state['tau'] and wpsnr >= 35.0) else 0
+    return decision, wpsnr
+```
+
+---
+
+## 6) Checklist di consegna (file + test)
+
+* `embedding(input1,input2)` correttamente salvato (naming conforme).
+* `detection(input1,input2,input3)` rispetta timeout ≤ 5 s.
+* `state.pkl` presente e leggero.
+* README con parametri usati (seed, alpha_matrix, ecc_params, tau).
+* Script ROC (inviato entro deadline) che mostra come è stato scelto `tau`.
+* Log di test con esempi di attacchi e risultati (WPSNR e success/fail).
+
+---
+
