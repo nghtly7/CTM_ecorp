@@ -141,9 +141,16 @@ if __name__ == '__main__':
 
     im = (cv2.imread('0092.bmp', 0))
     img_Att = awgn(im, 25, 42)
+<<<<<<< HEAD
     
     
     # Calculate WPSNR
     wpsnr_value = wpsnr(im, np.uint8(img_Att))
     
+=======
+
+    # Calculate WPSNR
+    wpsnr_value = wpsnr(im, np.uint8(img_Att))
+
+>>>>>>> 29d1e9044e80cf88be3485cc02465af491abcc18
     print(f"Original and Distorted Image WPSNR: {wpsnr_value:.4f} dB")
