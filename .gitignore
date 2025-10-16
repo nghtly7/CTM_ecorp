@@ -1,3 +1,5 @@
 images/
 watermarked_images/
+attacked_images/
 
+__pycache__/
