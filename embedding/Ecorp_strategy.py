@@ -120,7 +120,7 @@ def _zigzag_indices_8x8() -> np.ndarray:
 	return np.array(idx, dtype=np.int32)
 
 
-def _alpha_matrix(alpha0: float = 0.008, beta: float = 0.6) -> np.ndarray:
+def _alpha_matrix(alpha0: float = 0.015, beta: float = 0.6) -> np.ndarray:
 	# CSF-inspired masking: reduce strength near DC, increase towards mid frequencies
 	# beta kept for backward-compat in signature, not used
 	a = np.zeros((8, 8), dtype=np.float32)
@@ -284,16 +284,9 @@ def embedding(input1, input2):
 	W_bits = _load_watermark_bits(wm_path, target_len=1024)
 	orig_wm_len = int(W_bits.size)
 
-	# Adaptive base alpha from global variance/contrast
-	var_global = float(np.var(I_f32))
-	if var_global < 0.015:
-		alpha0 = 0.004  # smoother images -> weaker embedding
-	elif var_global > 0.05:
-		alpha0 = 0.010  # complex images -> stronger embedding
-	else:
-		# Linear interpolation between 0.004 and 0.010 in [0.015, 0.05]
-		frac = (var_global - 0.015) / (0.05 - 0.015)
-		alpha0 = 0.004 + (0.010 - 0.004) * frac
+	# Fixed base alpha (embedding strength)
+	# Previously adaptive based on variance; now set explicitly as requested
+	alpha0 = 0.015
 
 	# Add pilot tones (very low amplitude) in spatial domain
 	I_embed = np.clip(I_f32 + _pilot_tones_spatial(*I_f32.shape, amp=0.0025), 0.0, 1.0)
