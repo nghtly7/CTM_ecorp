@@ -138,3 +138,58 @@ High WPSNR (>66 dB): Achieved through very small embedding strength (0.001)
 Robustness: Maintained through frequency domain embedding and quantization
 Perceptual Quality: Protected by adaptive strength and mid-frequency targeting
 This implementation represents a sophisticated approach to digital watermarking that leverages wavelet theory for optimal embedding in the frequency domain.
+
+# Attack
+## Brute-Force Watermark Attack
+
+Purpose: automatically test single and paired image attacks on a watermarked image to try to break the watermark while keeping WPSNR ≥ 35 dB. Logs best result to `attack_results/result.csv`.
+
+### Paths
+- Original image: `sample-images/<ORIGINAL_NAME>`
+- Watermarked: `groups/<ADV_GROUP_NAME>/<ADV_GROUP_NAME>_<ORIGINAL_NAME>`
+- Outputs: `attack_results/` (images + `result.csv`, created if missing)
+
+Original image is only used for the detection function to compute WPSNR and check if watermark is found, and not to localize or remove the watermark.
+
+Built-in attacks (single or paired) — brief description
+- `jpeg` — JPEG compression (QF): introduces quantization artifacts and blocks that can disrupt embedded signals.  
+- `awgn` — Additive White Gaussian Noise (std, seed): adds random noise to reduce SNR of watermark.  
+- `blur` — Gaussian blur (sigma_y, sigma_x): low-pass filtering that attenuates high-frequency watermark components.  
+- `median` — Median filter (kernel): removes impulse-like structures, can alter embedded patterns.  
+- `sharp` — Unsharp masking (sigma, alpha): enhances edges and local contrast; can disturb watermark embedded in smooth areas or bands.  
+- `resize` — Downscale + upscale (scale): resampling artifacts and interpolation can destroy watermark alignment.  
+- `gauss_edge` — Gaussian blur only on edge regions ([[sigma_y, sigma_x], [th1, th2]]): targets watermark components near edges.  
+- `gauss_flat` — Gaussian blur only on flat regions ([[sigma_y, sigma_x], [th1, th2]]): targets watermark components in smooth areas.
+
+### Usage
+`attack_manual.py` lets you specify single or multiple attacks manually (same attack types) — you can start from the best attack found by `attack_brute_force.py` and tweak parameters to try to improve results slightly.
+Quick setup (edit top variables if needed):
+~~~
+OUR_GROUP_NAME = "Ecorp"
+ADV_GROUP_NAME = "Group_A"
+ORIGINAL_NAME = "0002.bmp"
+RESULTS_FOLDER = "attack_results"
+~~~
+
+**Run (brute-force):**
+~~~
+python attack_brute_force.py
+~~~
+What it does (expanded)
+- Builds a parameter grid of single attacks and pairwise combinations from `_generate_attack_list()`.  
+- Executes tests in parallel workers to speed up evaluation. Each worker:
+  - Applies the attack sequence to the watermarked image,
+  - Saves a temporary attacked image,
+  - Calls the adversary detection function `groups.<ADV_GROUP_NAME>.detection_<ADV_GROUP_NAME>.detection(original, watermarked, attacked)` which must return a tuple `(found, wpsnr)`.  
+- A test is considered successful if `found == 0` (detector fails to find watermark) **and** `wpsnr >= 35 dB` (quality constraint).  
+- Among successful tests the script keeps the one with highest WPSNR. It then:
+  - Re-generates the final attacked image with that attack,
+  - Saves it to `attack_results/` with an informative filename,
+  - Appends a row to `attack_results/result.csv` with Image, Group, WPSNR, Attack(s)+parameters.  
+
+**Run (manual / fine-tune):**
+~~~
+python attack_manual.py
+~~~
+
+- You can then use `attack_manual.py` to manually re-run or slightly tweak that best combination (same attack types) to try and improve WPSNR or robustness.
