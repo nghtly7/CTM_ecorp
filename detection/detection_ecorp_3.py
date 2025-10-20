@@ -8,6 +8,11 @@ WATERMARK_SIZE = 1024
 BLOCK_SIZE = 8
 THRESHOLD = 0.75  # τ
 
+def similarity(X,X_star):
+    #Computes the similarity measure between the original and the new watermarks.
+    s = np.sum(np.multiply(X, X_star)) / (np.sqrt(np.sum(np.multiply(X, X))) * np.sqrt(np.sum(np.multiply(X_star, X_star))))
+    return s
+
 def psnr(original, watermarked):
     original = original.astype(np.float64)
     watermarked = watermarked.astype(np.float64)
@@ -88,7 +93,7 @@ def detection(input1, input2, input3):
     W_att = _extract_from_image(att_f) # da attacked
 
     # Similarità (frazione di bit uguali)
-    sim = float(np.sum(W_ex == W_att)) / float(WATERMARK_SIZE)
+    sim = similarity(W_ex, W_att)
     print("similarity att-marked: ",sim)
     
     orig = cv2.imread(input1, cv2.IMREAD_GRAYSCALE)
