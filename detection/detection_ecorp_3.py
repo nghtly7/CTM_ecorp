@@ -8,6 +8,15 @@ WATERMARK_SIZE = 1024
 BLOCK_SIZE = 8
 THRESHOLD = 0.75  # τ
 
+def psnr(original, watermarked):
+    original = original.astype(np.float64)
+    watermarked = watermarked.astype(np.float64)
+    mse = np.mean((original - watermarked) ** 2)
+    if mse == 0:
+        return float('inf')
+    PIXEL_MAX = 255.0
+    return 20 * np.log10(PIXEL_MAX / np.sqrt(mse))
+
 def _extract_bits_from_coeffs(coeff_array):
     """
     Estrae WATERMARK_SIZE bit scorrendo i coefficienti per blocchi 8x8
@@ -65,10 +74,12 @@ def detection(input1, input2, input3):
       output1: 1 se watermark presente, 0 altrimenti (sim >= THRESHOLD)
       output2: wpsnr(watermarked, attacked)
     """
+    #original= cv2.imread(input1, cv2.IMREAD_GRAYSCALE)
     wm = cv2.imread(input2, cv2.IMREAD_GRAYSCALE)
     att = cv2.imread(input3, cv2.IMREAD_GRAYSCALE)
 
     # conversione a float per DWT
+    #original_f = original.astype(np.float64)
     wm_f = wm.astype(np.float64)
     att_f = att.astype(np.float64)
 
@@ -78,6 +89,12 @@ def detection(input1, input2, input3):
 
     # Similarità (frazione di bit uguali)
     sim = float(np.sum(W_ex == W_att)) / float(WATERMARK_SIZE)
+    print("similarity att-marked: ",sim)
+    
+    orig = cv2.imread(input1, cv2.IMREAD_GRAYSCALE)
+    wm   = cv2.imread(input2, cv2.IMREAD_GRAYSCALE)
+
+    print("PSNR origin-marked: ", psnr(orig, wm), "dB")
 
     # Decisione
     output1 = 1 if sim >= THRESHOLD else 0
