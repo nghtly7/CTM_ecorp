@@ -1,7 +1,7 @@
 import os
 import cv2
 import numpy as np
-from embedding.Ecorp_strategy import embedding
+from embedding_ecorp import embedding
 from wpsnr import wpsnr
 
 def test_embedding():
@@ -40,7 +40,7 @@ def test_embedding():
     # Process each image
     for i, image_file in enumerate(image_files, 1):
         input_path = os.path.join(input_dir, image_file)
-        output_filename = f"watermarked_{image_file}"
+        output_filename = f"ecorp_{image_file}"
         output_path = os.path.join(output_dir, output_filename)
         
         print(f"Processing image {i}: {image_file}")
