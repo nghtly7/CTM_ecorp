@@ -6,9 +6,9 @@ import cv2
 
 from attack_brute_force import attacks, save_attack_to_log
 
-OUR_GROUP_NAME = "Ecorp"
-ADV_GROUP_NAME = "Group_A"
-ORIGINAL_NAME = "0002.bmp"
+OUR_GROUP_NAME = "ecorp"
+ADV_GROUP_NAME = "..."  # set the target adversary group name here
+ORIGINAL_NAME = "0001.bmp"
 
 # ==================================
 #    CUSTOMIZE YOUR ATTACK HERE
