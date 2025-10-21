@@ -1,19 +1,13 @@
 import os
 import cv2
 import numpy as np
-from embedding.Ecorp_strategy import embedding
+from paper_try_2.paper_embedding_v1 import embedding
+from paper_try_2.paper_extraction import extraction
 from wpsnr import wpsnr
+from similarity import similarity
 
-# import detection (deve restituire output1, output2)
-try:
-    from detection.detection_ecorp_3 import detection
-except Exception as e:
-    detection = None
-    print("Warning: detection function not found. Skipping detection.")
-    print("Import error:", e)
-
-def test_embedding_and_detection():
-    """Test embedding on all images in images/ and run detection to verify watermark presence."""
+def test_embedding_and_extraction():
+    """Test embedding on all images and extract watermark to verify."""
     output_dir = "watermarked_images"
     os.makedirs(output_dir, exist_ok=True)
 
@@ -28,9 +22,12 @@ def test_embedding_and_detection():
         return
 
     print(f"Found {len(image_files)} image(s) in {input_dir}/")
-    print("-" * 60)
+    print("=" * 70)
 
-    watermark_file = "mark.npy"  # watermark used by embedding
+    # Load original watermark
+    watermark_file = "ecorp.npy"
+    original_watermark = np.load(watermark_file).astype(np.float32)
+    print(f"Original watermark loaded: {watermark_file} ({len(original_watermark)} bits)\n")
 
     for idx, image_file in enumerate(image_files, start=1):
         input_path = os.path.join(input_dir, image_file)
@@ -38,41 +35,46 @@ def test_embedding_and_detection():
         output_path = os.path.join(output_dir, output_filename)
 
         print(f"[{idx}/{len(image_files)}] Processing: {image_file}")
+        print("-" * 70)
 
         try:
-            # WATERMARKING
+            # 1) EMBEDDING
             watermarked_image = embedding(input_path, watermark_file)
 
-            # SAVE WATERMARKED
+            # 2) SAVE WATERMARKED IMAGE
             if not cv2.imwrite(output_path, watermarked_image):
                 print("  ✗ Failed to save watermarked image:", output_path)
                 continue
-
-            # LOCAL WPSNR
-            original_image = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
-            local_wpsnr = wpsnr(original_image, watermarked_image)
-
             print(f"  ✓ Watermarked image saved: {output_path}")
-            print(f"  ✓ Local wPSNR: {local_wpsnr:.4f} dB")
 
-            # DETECTION
-            if detection is not None:
-                # at the moment attacked = watermarked → should ALWAYS detect = 1
-                dec, det_wpsnr = detection(input_path, output_path, output_path)
+            # 3) CALCULATE WPSNR
+            original_image = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
+            wpsnr_value = wpsnr(original_image, watermarked_image)
+            print(f"  ✓ WPSNR (original vs watermarked): {wpsnr_value:.4f} dB")
 
-                status = "PRESENT" if dec == 1 else "NOT PRESENT"
-                print(f"  ▶ Detection result: {status} (dec = {dec})")
-                print(f"    • Detection wPSNR: {det_wpsnr:.4f} dB")
-            else:
-                print("  ⚠ Detection skipped (module missing)")
+            # 4) EXTRACT WATERMARK (NON-BLIND: needs original image)
+            extracted_watermark = extraction(output_path, input_path).astype(np.float32)
+            print(f"  ✓ Watermark extracted: {len(extracted_watermark)} bits")
 
+            # 5) CALCULATE SIMILARITY using provided function
+            sim_value = similarity(original_watermark, extracted_watermark)
+            print(f"  ✓ Similarity (extracted vs original): {sim_value:.4f}")
+
+            # Additional info
+            bit_errors = np.sum(extracted_watermark.astype(np.uint8) != original_watermark.astype(np.uint8))
+            accuracy = (1024 - bit_errors) / 1024
+            print(f"  → Bit accuracy: {accuracy*100:.2f}% ({bit_errors} errors)")
+            
             print()
 
         except Exception as e:
             print(f"  ✗ Error processing {image_file}: {e}")
+            import traceback
+            traceback.print_exc()
             print()
 
+    print("=" * 70)
     print("Processing completed!")
 
 if __name__ == "__main__":
-    test_embedding_and_detection()
+    test_embedding_and_extraction()

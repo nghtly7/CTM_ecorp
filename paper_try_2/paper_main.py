@@ -64,57 +64,57 @@ def main():
         # save watermarked image (BMP/PNG same name)
         cv2.imwrite(wm_path, Iw)
 
-        # 2) Attack: AWGN progressive -> save into per-image subfolder inside ATT_DIR
-        #    create a dedicated folder per original filename to avoid name collisions
-        base_noext = os.path.splitext(img_name)[0]
-        per_img_att_dir = os.path.join(ATT_DIR, base_noext)
-        ensure_dir(per_img_att_dir)
+        # # 2) Attack: AWGN progressive -> save into per-image subfolder inside ATT_DIR
+        # #    create a dedicated folder per original filename to avoid name collisions
+        # base_noext = os.path.splitext(img_name)[0]
+        # per_img_att_dir = os.path.join(ATT_DIR, base_noext)
+        # ensure_dir(per_img_att_dir)
 
-        awgn_params = AWGN_PARAMS.copy()
-        awgn_params["out_dir"] = per_img_att_dir
+        # awgn_params = AWGN_PARAMS.copy()
+        # awgn_params["out_dir"] = per_img_att_dir
 
-        try:
-            attacked_paths = attacks(wm_path, "awgn", awgn_params)
-        except Exception as e:
-            print(f"  ERROR during AWGN attacks for {img_name}: {e}")
-            continue
+        # try:
+        #     attacked_paths = attacks(wm_path, "awgn", awgn_params)
+        # except Exception as e:
+        #     print(f"  ERROR during AWGN attacks for {img_name}: {e}")
+        #     continue
 
-        # 3) For each attacked image run detection(original, watermarked, attacked)
-        #    and decide if the attack "succeeded" (present==0 and wpsnr >= 35)
-        success_found = False
-        for attacked_file in attacked_paths:
-            try:
-                present_flag, wpsnr_val = detection(input_path, wm_path, attacked_file)
-            except Exception as e:
-                print(f"    ERROR detection on {os.path.basename(attacked_file)}: {e}")
-                continue
+        # # 3) For each attacked image run detection(original, watermarked, attacked)
+        # #    and decide if the attack "succeeded" (present==0 and wpsnr >= 35)
+        # success_found = False
+        # for attacked_file in attacked_paths:
+        #     try:
+        #         present_flag, wpsnr_val = detection(input_path, wm_path, attacked_file)
+        #     except Exception as e:
+        #         print(f"    ERROR detection on {os.path.basename(attacked_file)}: {e}")
+        #         continue
 
-            # parse sigma from filename for nicer printing if present
-            fname = os.path.basename(attacked_file)
-            # attempt to extract "sigmaXX" substring
-            sigma_str = ""
-            if "sigma" in fname:
-                try:
-                    # find substring like sigmaXX.XX
-                    idx = fname.index("sigma")
-                    sigma_str = fname[idx: idx + fname[idx:].find(".")]
-                except Exception:
-                    sigma_str = ""
+        #     # parse sigma from filename for nicer printing if present
+        #     fname = os.path.basename(attacked_file)
+        #     # attempt to extract "sigmaXX" substring
+        #     sigma_str = ""
+        #     if "sigma" in fname:
+        #         try:
+        #             # find substring like sigmaXX.XX
+        #             idx = fname.index("sigma")
+        #             sigma_str = fname[idx: idx + fname[idx:].find(".")]
+        #         except Exception:
+        #             sigma_str = ""
 
-            status = "PRESENT" if present_flag == 1 else "DESTROYED"
-            success = (present_flag == 0 and wpsnr_val >= WPSNR_SUCCESS_THRESH)
+        #     status = "PRESENT" if present_flag == 1 else "DESTROYED"
+        #     success = (present_flag == 0 and wpsnr_val >= WPSNR_SUCCESS_THRESH)
 
-            print(f"    -> {fname} : detection={status}, WPSNR={wpsnr_val:.2f} dB, success={success}")
+        #     print(f"    -> {fname} : detection={status}, WPSNR={wpsnr_val:.2f} dB, success={success}")
 
-            if success:
-                success_found = True
-                # non obbligatorio: se vuoi fermarti al primo successo, decommenta la prossima riga
-                # break
+        #     if success:
+        #         success_found = True
+        #         # non obbligatorio: se vuoi fermarti al primo successo, decommenta la prossima riga
+        #         # break
 
-        if success_found:
-            print(f"  ==> ATTACK SUCCESSFUL for at least one noise level on {img_name}\n")
-        else:
-            print(f"  ==> No successful attack found (wpsnr >= {WPSNR_SUCCESS_THRESH} & watermark destroyed) for {img_name}\n")
+        # if success_found:
+        #     print(f"  ==> ATTACK SUCCESSFUL for at least one noise level on {img_name}\n")
+        # else:
+        #     print(f"  ==> No successful attack found (wpsnr >= {WPSNR_SUCCESS_THRESH} & watermark destroyed) for {img_name}\n")
 
     print("🎯 Pipeline completata.")
 
