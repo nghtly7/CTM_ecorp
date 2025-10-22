@@ -4,8 +4,8 @@ import pywt
 
 def embedding(input1, input2):
     
-    # Parametri embedding
-    alpha = 3.0     # embedding strength (aumentato per robustezza)
+    # Parameters
+    alpha = 3.0     # Embedding strength
     FIXED_SEED = 42
     WATERMARK_SIZE = 1024
     #np.random.seed(FIXED_SEED)
@@ -13,29 +13,29 @@ def embedding(input1, input2):
     # 1) I/O
     I = cv2.imread(input1, cv2.IMREAD_GRAYSCALE).astype(np.float32)
     
-    # Se watermark non passato, lo genero
+    # Generate random watermark if not provided
     if input2 is None:
         rng = np.random.default_rng(FIXED_SEED)
-        Wbits = rng.integers(0, 2, size=1024, dtype=np.uint8)  # vettore 0/1
-        np.save("generated_watermark.npy", Wbits)  # lo salvo per la detection
+        Wbits = rng.integers(0, 2, size=1024, dtype=np.uint8)  # 0/1 array
+        np.save("generated_watermark.npy", Wbits)  # Save generated watermark
     else:
         Wbits = np.load(input2).astype(np.uint8)    
 
-    # 2) DWT 3 livelli
+    # 2) DWT 3 levels
     coeffs = pywt.wavedec2(I, wavelet='db2', level=3)   # coeffs = (LL3, (LH3, HL3, HH3), (LH2, HL2, HH2), (LH1, HL1, HH1))
 
-    # 3) scegli 4 sottobande: HL13, LH13, HL23, LH23  (seguendo lo schema del paper)
-    #    NB: in pywt l’ordine in ciascun livello è (LH, HL, HH).
+    # 3) Choose 4 sub-bands: HL13, LH13, HL23, LH23  (follow paper schema)
+    #  REMARK: with pywt the order in each level is (LH, HL, HH).
     (LH3, HL3, HH3), (LH2, HL2, HH2), (LH1, HL1, HH1) = coeffs[1], coeffs[2], coeffs[3]
-    bands = [HL3, LH3, HL2, LH2]   # adatta all’esatta corrispondenza con le 4 mappe da 64x64
+    bands = [HL3, LH3, HL2, LH2]   # Adapt to exact correspondence with the 4 maps of 64x64
 
-    # 4) set mid-band e PN sequences
+    # 4) Set mid-band and PN sequences
     mask = [(0,1),(1,0),(1,1),(2,0),(0,2),(2,1),(1,2)] # 7 mid-frequency DCT coefficients
-    rng = np.random.default_rng(FIXED_SEED)      # fisso per coerenza detection
+    rng = np.random.default_rng(FIXED_SEED)      # Fixed for consistency in detection
     PN0 = rng.standard_normal(len(mask))
     PN1 = rng.standard_normal(len(mask))
 
-    # 5) embed 1 bit per blocco, 256 blocchi per banda × 4 bande = 1024
+    # 5) embed one bit per block, 256 blocks per band x 4 bands = 1024
     idx = 0
     for b in range(4):
         B = bands[b]
@@ -51,8 +51,8 @@ def embedding(input1, input2):
                 idx += 1
         bands[b] = B
 
-    # 6) rimetti le bande modificate dentro coeffs e IDWT
-    #    (ricostruisci la stessa struttura coeffs con le bande aggiornate)
+    # 6) Put modified bands back into coeffs and IDWT
+    # (rebuild the same coeffs structure with updated bands)
     new_coeffs = list(coeffs)
     LH3n, HL3n = bands[1], bands[0]
     LH2n, HL2n = bands[3], bands[2]

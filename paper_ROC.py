@@ -5,12 +5,11 @@ from sklearn.metrics import roc_curve, auc
 import matplotlib.pyplot as plt
 import random
 
-# Import your embedding, extraction, and similarity functions
 from paper_try_2.paper_embedding_v1 import embedding
-from paper_try_2.paper_extraction_v1 import extraction
+from paper_try_2.paper_detection_v1 import extraction
 from similarity import similarity
 
-# Attack functions (from the notebook)
+# Basic attack functions (from the labs)
 def awgn(img, std, seed=None):
     mean = 0.0
     if seed is not None:
@@ -139,7 +138,7 @@ def compute_roc_threshold(images_dir, num_iterations=500, max_fpr=0.1):
         cv2.imwrite('temp_attacked.bmp', attacked_image)
         
         # Extract watermark from attacked image
-        extracted_watermark = extraction('temp_attacked.bmp', 'temp_original.bmp')
+        extracted_watermark = extraction('temp_original.bmp', 'temp_attacked.bmp')
         
         # H1: Compute similarity between original and extracted watermark
         sim_h1 = similarity(original_watermark, extracted_watermark)
@@ -217,7 +216,7 @@ if __name__ == "__main__":
     # Compute ROC and get optimal threshold
     tau, fpr, tpr, roc_auc = compute_roc_threshold(
         images_dir='sample-images/',
-        num_iterations=1000,
+        num_iterations=500,
         max_fpr=0.1
     )
     

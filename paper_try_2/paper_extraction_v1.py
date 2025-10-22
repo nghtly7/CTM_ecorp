@@ -77,12 +77,4 @@ def extraction(input1, input2):
     return bits
 
 
-if __name__ == "__main__":
-    # Test code
-    watermark = extraction('watermarked_image.bmp', 'original_image.bmp')
-    np.save('extracted_watermark.npy', watermark)
-    
-    original_wm = np.load('ecorp.npy')
-    accuracy = np.sum(watermark == original_wm) / 1024
-    print(f"Bit accuracy: {accuracy*100:.2f}%")
 
