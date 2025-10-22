@@ -34,7 +34,7 @@ def test_embedding():
     print("-" * 50)
     
     # Dummy watermark file (not used by our embedding function)
-    watermark = "mark.npy"
+    watermark = "ecorp.npy"
 
     
     # Process each image

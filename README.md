@@ -165,7 +165,7 @@ Built-in attacks (single or paired) — brief description
 `attack_manual.py` lets you specify single or multiple attacks manually (same attack types) — you can start from the best attack found by `attack_brute_force.py` and tweak parameters to try to improve results slightly.
 Quick setup (edit top variables if needed):
 ~~~
-OUR_GROUP_NAME = "Ecorp"
+OUR_GROUP_NAME = "ecorp"
 ADV_GROUP_NAME = "Group_A"
 ORIGINAL_NAME = "0002.bmp"
 RESULTS_FOLDER = "attack_results"

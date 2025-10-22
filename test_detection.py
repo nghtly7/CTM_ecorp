@@ -3,8 +3,8 @@ import json
 import cv2
 import numpy as np
 
-from embedding.Ecorp_strategy import embedding
-from detection.Ecorp_detection import detection
+from embedding_ecorp import embedding
+from detection_ecorp import detection
 
 
 def ensure_dir(path: str):
@@ -95,7 +95,7 @@ def test_detection():
     print('-' * 80)
 
     # Watermark file path used by embedding (kept for API compliance)
-    watermark = 'mark.npy'
+    watermark = 'ecorp.npy'
 
     # Define attack sweeps (increasing intensity)
     # Note: For JPEG and resize, lower quality/scale means stronger attack

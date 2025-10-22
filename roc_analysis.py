@@ -14,7 +14,7 @@ from sklearn.metrics import roc_curve, auc
 from hashlib import sha256
 
 _ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
-WATERMARK_PATH = os.path.join(_ROOT_DIR, 'mark.npy')
+WATERMARK_PATH = os.path.join(_ROOT_DIR, 'ecorp.npy')
 SAMPLE_IMAGES_DIR = os.path.join(_ROOT_DIR, 'sample-images')
 NUM_ITERATIONS = 500
 TARGET_FPR = 0.1
