@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import pywt
+import os
 
 
 # ---- Attack-map helpers ----
@@ -73,9 +74,11 @@ def embedding(input1, input2='../ecorp.npy'):
     if input2 is None:
         rng = np.random.default_rng(FIXED_SEED)
         Wbits = rng.integers(0, 2, size=1024, dtype=np.uint8)  # vettore 0/1
-        np.save("generated_watermark.npy", Wbits)  # lo salvo per la detection
     else:
-        Wbits = np.load(input2).astype(np.uint8)    
+        if not os.path.isabs(input2):
+            input2 = os.path.join(os.path.dirname(__file__), "..", input2)
+
+    Wbits = np.load(input2).astype(np.uint8)    
 
     # 2) DWT 3 livelli
     coeffs = pywt.wavedec2(I, wavelet='db2', level=3)   # coeffs = (LL3, (LH3, HL3, HH3), (LH2, HL2, HH2), (LH1, HL1, HH1))
@@ -146,11 +149,12 @@ def embedding(input1, input2='../ecorp.npy'):
 
     # --- 7) EMBEDDING REALE (con alpha scalato) ---
     idx = 0
-    beta   = 0.6
-    gamma  = 0.4
-    soft_t = 0.15   # soglia blocchi piatti (15% sotto l'energia media)
-    soft_k = 0.6
-    Q = 0.6  # quantizzazione correttiva
+    # beta   = 0.6
+    # gamma  = 0.4
+    # soft_t = 0.15   # soglia blocchi piatti (15% sotto l'energia media)
+    # soft_k = 0.6
+    # Q = 0.6  # quantizzazione correttiva
+    from paper_embedding_v1_2 import beta, gamma, soft_t, soft_k, Q
     for b in range(4):
         B = bands[b]
         for by in range(0, 64, 4):
@@ -185,8 +189,10 @@ def embedding(input1, input2='../ecorp.npy'):
                 #* da capire meglio questo blocco
                 alpha_block = alpha * (1.0 + beta * E_norm) * (1.0 - gamma * attack_score) * lum_mask
                 if E < soft_t * E_mean:
-                    #alpha_block *= soft_k #*specialmente questa parte
-                    continue  # skip totale per blocchi piatti
+                    if soft_k == 0.8:
+                        continue  # skip totale per blocchi piatti
+                    else:
+                        alpha_block *= soft_k
                 alpha_block = float(np.clip(alpha_block, 0.1*alpha, 2.0*alpha))
                 
                  
