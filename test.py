@@ -31,7 +31,7 @@ def test_embedding_and_extraction():
 
     for idx, image_file in enumerate(image_files, start=1):
         input_path = os.path.join(input_dir, image_file)
-        output_filename = f"watermarked_{image_file}"
+        output_filename = f"ecorp_{image_file}"
         output_path = os.path.join(output_dir, output_filename)
 
         print(f"[{idx}/{len(image_files)}] Processing: {image_file}")

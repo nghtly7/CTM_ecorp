@@ -2,4 +2,8 @@ images/
 watermarked_images*/
 sample-images/
 attacked_images*/
+attack_results/
+groups/
+
 __pycache__/
+
