@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 from paper_try_2.paper_embedding_v1 import embedding
-from paper_try_2.paper_extraction import extraction
+from paper_try_2.paper_extraction_v1 import extraction
 from wpsnr import wpsnr
 from similarity import similarity
 
