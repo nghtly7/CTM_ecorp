@@ -35,8 +35,8 @@ ORIGINAL_NAME = "0001.bmp"
 #   attack_names = ["awgn","jpeg"]
 #   param_values = [[10.0, 123], [50]]
 
-attack_names = "jpeg"
-param_values = [70]
+attack_names = "blur"
+param_values = [3.0, 3.0]
 
 RESULTS_FOLDER = "attack_results"
 

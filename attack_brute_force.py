@@ -21,12 +21,7 @@ from collections import OrderedDict, defaultdict
 OUR_GROUP_NAME = "ecorp"
 ADV_GROUP_NAME = "..." # set the target adversary group name here
 RESULTS_FOLDER = "attack_results"
-
-# Ensure project root is importable
-_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
-_ROOT_DIR = os.path.dirname(_THIS_DIR)
-if _ROOT_DIR not in sys.path:
-    sys.path.insert(0, _ROOT_DIR)
+ORIGINALS_DIR = "sample-images"
 
 # Optional WPSNR import
 try:
@@ -484,11 +479,7 @@ if __name__ == "__main__":
     NUM_WORKERS = os.cpu_count() or 4
     print(f"Using {NUM_WORKERS} parallel workers for brute-force attack (one worker per attack *type*).")
 
-    base_dir = _ROOT_DIR
-    PROJECT_ROOT = os.path.join(base_dir, "CTM_ecorp")
-    ORIGINALS_DIR = os.path.join(PROJECT_ROOT, "sample-images")
-    ADVERSARY_DIR = os.path.join(PROJECT_ROOT, "groups", ADV_GROUP_NAME)
-
+    ADVERSARY_DIR = os.path.join("groups", ADV_GROUP_NAME)
     print(f"Attacking group '{ADV_GROUP_NAME}' in folder: {ADVERSARY_DIR}")
     print(f"Using originals from: {ORIGINALS_DIR}")
 
