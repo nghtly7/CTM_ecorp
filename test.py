@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import os
 from paper_try_2.paper_embedding_v1 import embedding
-from paper_try_2.paper_detection_v1 import extraction, detection, wpsnr, similarity
+from paper_try_2.paper_detection_v1_1 import extraction, detection, wpsnr, similarity
 import random
 
 def awgn(img, std, seed=None):

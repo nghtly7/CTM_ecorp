@@ -5,3 +5,4 @@ attacked_images*/
 __pycache__/
 *.bmp
 *.npy
+ecorp.npy

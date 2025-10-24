@@ -33,7 +33,7 @@ BETAS  = [0.4, 0.6, 0.8]
 GAMMAS = [0.2, 0.4, 0.6]
 QS     = [0.6, 0.8, 1.0]
 SOFT_TS = [0.10, 0.15, 0.20]
-SOFT_KS = [0.4, 0.6]
+SOFT_KS = [0.4, 0.6, 0.8]
 
 # Attacks (FULL): AWGN, BLUR, SHARPEN, JPEG, RESIZE, MEDIAN
 AWGN_SIGMAS = [1.0, 3.0, 5.0, 8.0]

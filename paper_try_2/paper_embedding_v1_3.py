@@ -81,9 +81,9 @@ def embedding(input1, input2='ecorp.npy'):
     FIXED_SEED = 42
 
     # Target WPSNR preciso
-    TARGET_WPSNR = 70.00
-    TOL = 0.05
-    MAX_ITERS = 4
+    TARGET_WPSNR = 58.02
+    TOL = 0.02
+    MAX_ITERS = 6
 
     # 1) I/O
     I = cv2.imread(input1, cv2.IMREAD_GRAYSCALE).astype(np.float32)

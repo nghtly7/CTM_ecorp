@@ -67,12 +67,12 @@ Q      = 0.6
 soft_t = 0.15
 soft_k = 0.6
 
-# weaker default parameters
+#! weaker default parameters
 #Q      = 0.3
-beta   = 0.3
-soft_t = 0.30
-soft_k = 1.0 # al momento nemmeno usato
-band_scale = [1.0, 1.0, 0.7, 0.7]   # bande fini più forti, bande grossolane più deboli
+# beta   = 0.3
+# soft_t = 0.30
+# soft_k = 1.0 # al momento nemmeno usato
+# band_scale = [1.0, 1.0, 0.7, 0.7]   # bande fini più forti, bande grossolane più deboli
 
 def embedding(input1, input2='ecorp.npy'):
     
@@ -105,7 +105,7 @@ def embedding(input1, input2='ecorp.npy'):
 
     # 4) set mid-band e PN sequences
     mask = [(0,1),(1,0),(1,1),(2,0),(0,2),(2,1),(1,2)] # 7 mid-frequency DCT coefficients
-    mask = [(0,1),(1,0),(1,1),(2,0),(0,2)] # weaker mask
+    mask = [(0,1),(1,0),(1,1),(2,0),(0,2)] #! weaker mask
     rng = np.random.default_rng(FIXED_SEED)      # fisso per coerenza detection
     PN0 = rng.standard_normal(len(mask)).astype(np.float32)
     PN1 = rng.standard_normal(len(mask)).astype(np.float32)
@@ -149,9 +149,9 @@ def embedding(input1, input2='ecorp.npy'):
                 lum_mask = 1.0 + 0.15 * (local_mean/128.0 - 1.0)
 
                 beta = 0.6
-                beta = 0.3  # weaker
+                # beta = 0.3  #! weaker
                 alpha_block = alpha * (1.0 + beta * E_norm) * lum_mask
-                alpha_block *= band_scale[b]
+                #alpha_block *= band_scale[b]
                 alpha_block = float(np.clip(alpha_block, 0.1*alpha, 2.0*alpha))
                 
 
@@ -209,6 +209,7 @@ def embedding(input1, input2='ecorp.npy'):
                 #* da capire meglio questo blocco
                 alpha_block = alpha * (1.0 + beta * E_norm) * (1.0 - gamma * attack_score) * lum_mask
                 if E < soft_t * E_mean:
+                    idx += 1
                     continue
                     #if soft_k == 2:
                         #continue  # skip totale per blocchi piatti
