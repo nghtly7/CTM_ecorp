@@ -1,3 +1,4 @@
+import traceback
 import importlib
 import os
 import sys
@@ -14,7 +15,7 @@ from collections import OrderedDict, defaultdict
 from attack import attack
 
 OUR_GROUP_NAME = "ecorp"
-ADV_GROUP_NAME = "..." # set the target adversary group name here
+ADV_GROUP_NAME = "v1"  # set the target adversary group name here
 RESULTS_FOLDER = "attack_results"
 ORIGINALS_DIR = "sample-images"
 
@@ -28,18 +29,30 @@ except ImportError:
 # -------------------------
 # Brute-force attack generator
 # -------------------------
+
+
 def _generate_attack_list() -> List[Dict[str, Any]]:
     """Produce ordered single and paired attack combinations (least -> most aggressive)."""
     attack_params_db = OrderedDict([
-        ('jpeg', ('QF', [[q] for q in range(95, 29, -5)])),
-        ('blur', ('sigma', [[round(s, 2), round(s, 2)] for s in np.arange(0.4, 1.6, 0.2)])),
+        ('jpeg', ('QF', [[q] for q in range(50, 29, -5)])),
+        ('blur', ('sigma', [[round(s, 2), round(s, 2)] for s in np.arange(0.4, 2.4, 0.4)])),
         ('median', ('kernel_size', [[3, 3], [5, 5]])),
         ('awgn', ('std_seed', [[s, 123] for s in [5.0, 10.0, 15.0, 20.0]])),
-        ('resize', ('scale', [[s] for s in [0.9, 0.75, 0.5]])),
-        ('sharp', ('sigma_alpha', [[0.5, 0.5], [0.5, 1.0], [1.0, 0.5], [1.0, 1.0], [1.0, 1.5]])),
+        ('resize', ('scale', [[s] for s in [0.7, 0.5]])),
+        ('sharp', ('sigma_alpha', [[0.5, 0.5], [0.5, 1.0], [1.0, 0.5], [1.0, 1.0]])),
         ('gauss_edge', ('sigma_edge', [[[0.5, 0.5], [30, 60]], [[1.0, 1.0], [30, 60]]])),
         ('gauss_flat', ('sigma_edge', [[[0.5, 0.5], [30, 60]], [[1.0, 1.0], [30, 60]]])),
     ])
+    # attack_params_db = OrderedDict([
+    #     ('jpeg', ('QF', [[q] for q in range(95, 29, -5)])),
+    #     ('blur', ('sigma', [[round(s, 2), round(s, 2)] for s in np.arange(0.4, 1.6, 0.2)])),
+    #     ('median', ('kernel_size', [[3, 3], [5, 5]])),
+    #     ('awgn', ('std_seed', [[s, 123] for s in [5.0, 10.0, 15.0, 20.0]])),
+    #     ('resize', ('scale', [[s] for s in [0.9, 0.75, 0.5]])),
+    #     ('sharp', ('sigma_alpha', [[0.5, 0.5], [0.5, 1.0], [1.0, 0.5], [1.0, 1.0], [1.0, 1.5]])),
+    #     ('gauss_edge', ('sigma_edge', [[[0.5, 0.5], [30, 60]], [[1.0, 1.0], [30, 60]]])),
+    #     ('gauss_flat', ('sigma_edge', [[[0.5, 0.5], [30, 60]], [[1.0, 1.0], [30, 60]]])),
+    # ])
 
     single_attacks = []
     for name, (_, params_list) in attack_params_db.items():
@@ -64,7 +77,7 @@ def _generate_attack_list() -> List[Dict[str, Any]]:
 # -------------------------
 # Evaluation helpers
 # -------------------------
-import traceback
+
 
 def _evaluate_single_attack(
     original_path: str,
@@ -74,8 +87,12 @@ def _evaluate_single_attack(
 ) -> tuple:
     """
     Apply attack combo, run adversary detection, and compute WPSNR.
-    More robust and verbose for debugging.
-    Returns (is_successful, wpsnr_val, attack_combo).
+
+    # Returns (status_code, wpsnr_val, attack_combo)
+    # status_code:
+    #   1 = SUCCESS (found=0, wpsnr >= 35)
+    #   0 = FAIL_KEEP_GOING (found=1)
+    #  -1 = FAIL_STOP_WORKER (found=0, wpsnr < 35)
     """
     attack_names = attack_combo.get("names")
     attack_params = attack_combo.get("params")
@@ -135,22 +152,29 @@ def _evaluate_single_attack(
         except Exception:
             raise ValueError(f"WPSNR value not convertible to float: {wpsnr_val}")
 
-        # Success criteria: watermark not found (0) AND wpsnr is high
-        is_successful = (found == 0 and wpsnr_val >= 35.0)
+        if wpsnr_val < 35.0:
+            return (-1, wpsnr_val, attack_combo)  # -1 = FAIL_STOP_WORKER (too strong)
 
-        return (is_successful, float(wpsnr_val), attack_combo)
+        # Return a status code instead of a simple boolean
+        if found == 0:
+            # Watermark removed AND quality is good
+            return (1, wpsnr_val, attack_combo)  # 1 = SUCCESS
+
+        # Watermark is still present
+        return (0, wpsnr_val, attack_combo)   # 0 = FAIL_KEEP_GOING (not strong enough)
 
     except Exception as e:
         # Print full traceback + contextual info (very useful)
         print(f"[Worker ERROR] attack={attack_names} params={attack_params} -> {e}")
         traceback.print_exc()
-        return (False, 0.0, attack_combo)
+        return (0, 0.0, attack_combo)
     finally:
         if os.path.exists(tmp_path):
             try:
                 os.remove(tmp_path)
             except Exception:
                 pass
+
 
 def _run_attack_type_worker(
     original_path: str,
@@ -160,21 +184,36 @@ def _run_attack_type_worker(
     attack_combos_for_type: List[Dict[str, Any]]
 ) -> tuple:
     """
-    Sequentially test variations of a given attack type and return the first success.
+    Sequentially test variations of a given attack type.
+
+    # Stops and returns the first SUCCESS (status=1)
+    # Stops and breaks if it finds a FAIL_TOO_STRONG (status=-1)
     """
+    print(f"   [Worker {os.getpid()}] Starting job for type {attack_type_id} ({len(attack_combos_for_type)} variations)")
+
     for attack_combo in attack_combos_for_type:
         try:
-            success, wpsnr_val, attack = _evaluate_single_attack(
+            status, wpsnr_val, attack = _evaluate_single_attack(
                 original_path,
                 watermarked_path,
                 adv_detection_func,
                 attack_combo
             )
 
-            if success:
-                print(f"  [Worker {os.getpid()}] +++ SUCCESS for type {attack_type_id} "
+            if status == 1:  # SUCCESS
+                print(f"   [Worker {os.getpid()}] +++ SUCCESS for type {attack_type_id} "
                       f"with {attack['names']} {attack['params']}. WPSNR: {wpsnr_val:.2f}")
                 return (wpsnr_val, attack)
+
+            elif status == -1:  # FAIL_TOO_STRONG
+                # This attack sequence is too strong and will only get stronger.
+                # Stop processing this worker's queue.
+                print(f"   [Worker {os.getpid()}] --- STOPPING type {attack_type_id} "
+                      f"(Attack {attack['names']} {attack['params']} was too strong: WPSNR {wpsnr_val:.2f})")
+                break  # Exit the for loop early
+
+            if status == 0:  # FAIL_KEEP_GOING, the loop continues to the next attack_combo
+                continue
 
         except Exception as e:
             print(f"Error in worker for type {attack_type_id}: {e}")
@@ -197,7 +236,25 @@ def find_best_attack(
 
     grouped_attacks = defaultdict(list)
     for attack_combo in attack_list:
-        attack_type_id = tuple(sorted(attack_combo["names"]))
+
+        names = attack_combo["names"]
+        params = attack_combo["params"]
+
+        attack_type_id = None
+        if len(names) == 1:
+            # For single attacks, group by name
+            # e.g., key = ('jpeg',)
+            attack_type_id = (names[0],)
+        else:
+            # For paired attacks, group by:
+            # 1. First attack name (e.g., 'jpeg')
+            # 2. First attack param (e.g., '[95]')
+            # 3. Second attack name (e.g., 'blur')
+            # e.g., key = ('jpeg', '[95]', 'blur')
+
+            param_str = str(params[0])
+            attack_type_id = (names[0], param_str, names[1])
+
         grouped_attacks[attack_type_id].append(attack_combo)
 
     num_types_to_test = len(grouped_attacks)
@@ -276,14 +333,23 @@ def save_attack_to_log(adv_group: str, image_name: str, best_attack: dict, wpsnr
                     "Attack(s) with parameters"
                 ])
             image_basename = os.path.splitext(image_name)[0]
-            attack_str = _format_params_for_log(best_attack["names"], best_attack["params"])
+
+            if best_attack:
+                attack_str = _format_params_for_log(best_attack["names"], best_attack["params"])
+                wpsnr_str = f"{wpsnr:.2f}"
+                log_message = f"Successfully saved best attack result to log: '{csv_result}'"
+            else:
+                attack_str = "NO_SUCCESSFUL_ATTACK_FOUND"
+                wpsnr_str = "N/A"
+                log_message = f"Successfully logged NO ATTACK for {image_basename} to log: '{csv_result}'"
+
             writer.writerow([
                 image_basename,
                 adv_group,
-                f"{wpsnr:.2f}",
+                wpsnr_str,
                 attack_str
             ])
-        print(f"Successfully saved best attack result to log: '{csv_result}'")
+        print(log_message)
     except IOError as e:
         print(f"Error: Could not write to log file '{csv_result}': {e}")
     except Exception as e:

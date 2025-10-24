@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import uuid
 from pyparsing import Union
-from rpds import List
+from typing import List
 from scipy.signal import medfilt
 from scipy.ndimage import gaussian_filter
 from PIL import Image
