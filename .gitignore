@@ -2,7 +2,7 @@ images/
 sample-images/
 attacked_images*/
 attack_results/*.bmp
-groups/
 
 __pycache__/
 
+.DS_Store

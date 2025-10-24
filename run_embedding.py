@@ -3,12 +3,8 @@ import cv2
 import csv
 import numpy as np
 
-# SELECT the embedding function to test
-from CTM_ecorp.nic_strategy.embedding_nic_strategy import embedding
-STRATEGY_NAME = "nic_strategy"
-
-# from paper_try_2.paper_embedding_v1 import embedding
-# STRATEGY_NAME = "paper_try_2"
+from embedding_ecorp import embedding
+STRATEGY_NAME = "v1_2"
 
 from wpsnr import wpsnr
 
