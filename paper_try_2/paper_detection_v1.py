@@ -49,9 +49,9 @@ def detection(input1, input2, input3):
     hd = np.count_nonzero(bits_w ^ bits_att)
     sim = 1.0 - hd/1024.0
     present = 1 if sim >= tau_global else 0
-    print(f"    Similarità: {sim:.4f} (hd={hd}) -> {'PRESENT' if present==1 else 'NOT PRESENT'}")
+    #print(f"    Similarità: {sim:.4f} (hd={hd}) -> {'PRESENT' if present==1 else 'NOT PRESENT'}")
     
     # 3) WPSNR tra watermarked e attacked
-    wpsnr_val = WPSNR(I_w, I_att)
+    wpsnr_val = WPSNR(I_orig, I_att)
 
     return present, float(wpsnr_val)
