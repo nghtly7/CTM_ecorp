@@ -2,11 +2,11 @@ import cv2
 import numpy as np
 import pywt
 
-def extraction(input1, input2):
+def extraction(Io, Iw):
     """
     Non-blind watermark extraction
-    input1: string of watermarked image filename (BMP format)
-    input2: string of original image filename (BMP format)
+    input1: watermarked image filename (BMP format)
+    input2: original image filename (BMP format)
     returns: 1024-bit watermark as numpy array
     """
     
@@ -17,17 +17,17 @@ def extraction(input1, input2):
     PN0 = rng.standard_normal(len(mask))
     PN1 = rng.standard_normal(len(mask))
     
-    # Read watermarked image
-    Iw = cv2.imread(input1, cv2.IMREAD_GRAYSCALE)
-    if Iw is None:
-        raise ValueError(f"Cannot read watermarked image: {input1}")
-    Iw = Iw.astype(np.float32)
+    # # Read watermarked image
+    # Iw = cv2.imread(input1, cv2.IMREAD_GRAYSCALE)
+    # if Iw is None:
+    #     raise ValueError(f"Cannot read watermarked image: {input1}")
+    # Iw = Iw.astype(np.float32)
     
-    # Read original image
-    Io = cv2.imread(input2, cv2.IMREAD_GRAYSCALE)
-    if Io is None:
-        raise ValueError(f"Cannot read original image: {input2}")
-    Io = Io.astype(np.float32)
+    # # Read original image
+    # Io = cv2.imread(input2, cv2.IMREAD_GRAYSCALE)
+    # if Io is None:
+    #     raise ValueError(f"Cannot read original image: {input2}")
+    # Io = Io.astype(np.float32)
 
     # DWT decomposition of BOTH images
     coeffs_w = pywt.wavedec2(Iw, 'db2', level=3)
