@@ -126,7 +126,7 @@ def test_watermarking_system(images_dir='images/', watermark_path='ecorp.npy'):
         I_watermarked = embedding('temp_original.bmp', watermark_path)
         cv2.imwrite('temp_watermarked.bmp', I_watermarked)
         
-        wpsnr_embedded = wpsnr(I_orig.astype(np.float32), I_watermarked.astype(np.float32))
+        wpsnr_embedded = wpsnr(I_orig.astype(np.float32) / 255.0, I_watermarked.astype(np.float32) / 255.0)
         print(f"✓ Watermark embedded")
         print(f"  WPSNR (original vs watermarked): {wpsnr_embedded:.2f} dB\n")
         
@@ -163,7 +163,7 @@ def test_watermarking_system(images_dir='images/', watermark_path='ecorp.npy'):
         I_attacked, attack_name = random_attack(I_watermarked)
         cv2.imwrite('temp_attacked.bmp', I_attacked)
         
-        wpsnr_attacked = wpsnr(I_orig.astype(np.float32), I_attacked.astype(np.float32))
+        wpsnr_attacked = wpsnr(I_orig.astype(np.float32) / 255.0, I_attacked.astype(np.float32) / 255.0)
         print(f"  Attack applied: {attack_name}")
         print(f"  WPSNR (original vs attacked): {wpsnr_attacked:.2f} dB")
         

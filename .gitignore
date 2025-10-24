@@ -3,3 +3,5 @@ watermarked_images*/
 sample-images/
 attacked_images*/
 __pycache__/
+*.bmp
+*.npy
