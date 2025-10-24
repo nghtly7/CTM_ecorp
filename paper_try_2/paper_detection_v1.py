@@ -217,40 +217,24 @@ def extraction(input1, input2): # 1 original, 2 watermarked
 
 
 def detection(input1, input2, input3):
-    """
-    Detects if the watermark is present in the input image.
     
-    Args:
-        input1: Path to original image
-        input2: Path to watermarked image (containing the original watermark)
-        input3: Path to test image (to check if it contains the watermark)
+    tau = 0.517647
+    I_orig = cv2.imread(input1, cv2.IMREAD_GRAYSCALE)
+    I_w    = cv2.imread(input2, cv2.IMREAD_GRAYSCALE)
+    I_att  = cv2.imread(input3, cv2.IMREAD_GRAYSCALE)
+
+    # 1) Extractions
+    watermark_extracted = extraction(input1, input2)
+    watermark_attacked = extraction(input1 , input3)
+
+    # 2) Similarity
+    sim = similarity(watermark_extracted, watermark_attacked)
+    hd = np.sum(np.abs(watermark_extracted - watermark_attacked))
     
-    Returns:
-        detected: 1 if watermark detected, 0 otherwise
-        wpsnr_val: WPSNR between input2 and input3
-    """
+    output1 = 1 if sim >= tau else 0 # present/not present
+    #print(f" Similarity: {sim:.4f} (hd={hd}) -> {'PRESENT' if present==1 else 'NOT PRESENT'}")
     
-    tau = 0.51
-    # Load images
-    I_orig = cv2.imread(input1, cv2.IMREAD_GRAYSCALE).astype(np.float32)
-    I_watermarked = cv2.imread(input2, cv2.IMREAD_GRAYSCALE).astype(np.float32)
-    I_test = cv2.imread(input3, cv2.IMREAD_GRAYSCALE).astype(np.float32)
-    
-    # Compute WPSNR between watermarked and test image
-    wpsnr_val = wpsnr(I_watermarked / 255.0, I_test / 255.0)
-    
-    # Extract watermark from the watermarked image (the reference)
-    # This gives us the original watermark that was embedded
-    watermark_original = extraction(input1, input2)
-    
-    # Extract watermark from the test image
-    watermark_extracted = extraction(input1, input3)
-    
-    # Compute similarity between the two watermarks
-    sim = similarity(watermark_original, watermark_extracted)
-    
-    
-    # Detection decision
-    detected = 1 if sim >= tau else 0
-    
-    return detected, wpsnr_val
+    # 3) WPSNR tra watermarked e attacked
+    output2 = float(wpsnr(I_w, I_att)) # wpsnr_watermarked_attacked
+
+    return output1, output2

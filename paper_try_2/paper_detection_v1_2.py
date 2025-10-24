@@ -104,7 +104,7 @@ def detection(orig, wm, att, tau=TAU_DEFAULT):
 
     # controlli
     if I_orig is None or I_w is None or I_att is None:
-        raise ValueError("detection_nonblind: immagine non caricata correttamente")
+        raise ValueError("detection: immagine non caricata correttamente")
 
     # Estrai bit da (orig -> wm) e (orig -> att)
     bits_w, conf_w = _extract_bits_from_pair(I_orig, I_w)
