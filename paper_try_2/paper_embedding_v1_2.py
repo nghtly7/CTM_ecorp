@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import pywt
 import os
+from wpsnr import wpsnr as WPSNR
 
 
 # ---- Attack-map helpers ----
@@ -58,8 +59,22 @@ def compute_attack_map(I_u8):
     A = cv2.GaussianBlur(A, (5, 5), 0.8)
     return A
 
+# === GLOBAL PARAMS (used by tuning and normal embedding) ===
+global beta, gamma, Q, soft_t, soft_k
+beta   = 0.6
+gamma  = 0.4
+Q      = 0.6
+soft_t = 0.15
+soft_k = 0.6
 
-def embedding(input1, input2='../ecorp.npy'):
+# weaker default parameters
+#Q      = 0.3
+beta   = 0.3
+soft_t = 0.30
+soft_k = 1.0 # al momento nemmeno usato
+band_scale = [1.0, 1.0, 0.7, 0.7]   # bande fini più forti, bande grossolane più deboli
+
+def embedding(input1, input2='ecorp.npy'):
     
     # Parametri embedding
     alpha = 3.0     # embedding strength (aumentato per robustezza)
@@ -90,6 +105,7 @@ def embedding(input1, input2='../ecorp.npy'):
 
     # 4) set mid-band e PN sequences
     mask = [(0,1),(1,0),(1,1),(2,0),(0,2),(2,1),(1,2)] # 7 mid-frequency DCT coefficients
+    mask = [(0,1),(1,0),(1,1),(2,0),(0,2)] # weaker mask
     rng = np.random.default_rng(FIXED_SEED)      # fisso per coerenza detection
     PN0 = rng.standard_normal(len(mask)).astype(np.float32)
     PN1 = rng.standard_normal(len(mask)).astype(np.float32)
@@ -133,8 +149,11 @@ def embedding(input1, input2='../ecorp.npy'):
                 lum_mask = 1.0 + 0.15 * (local_mean/128.0 - 1.0)
 
                 beta = 0.6
+                beta = 0.3  # weaker
                 alpha_block = alpha * (1.0 + beta * E_norm) * lum_mask
+                alpha_block *= band_scale[b]
                 alpha_block = float(np.clip(alpha_block, 0.1*alpha, 2.0*alpha))
+                
 
                 alpha_blocks.append(alpha_block)
                 idx += 1
@@ -142,10 +161,10 @@ def embedding(input1, input2='../ecorp.npy'):
     # --- 6) WPSNR BUDGETING ---
     pred_MSE = np.sum(np.array(alpha_blocks, dtype=np.float32)**2) / (I.shape[0] * I.shape[1])
     target_wpsnr_db = 66.0
+    #target_wpsnr_db = 80.0 #! weaker target
     target_mse = (255.0**2) / (10**(target_wpsnr_db/10))
     scale = np.sqrt(target_mse / (pred_MSE + 1e-12))
     alpha *= scale   # alpha definitivo e ottimale
-
 
     # --- 7) EMBEDDING REALE (con alpha scalato) ---
     idx = 0
@@ -155,6 +174,7 @@ def embedding(input1, input2='../ecorp.npy'):
     # soft_k = 0.6
     # Q = 0.6  # quantizzazione correttiva
     from paper_embedding_v1_2 import beta, gamma, soft_t, soft_k, Q
+    #print(f"  [embedding] alpha final = {alpha:.4f}, Q = {Q}, beta = {beta}, gamma = {gamma}, soft_t = {soft_t}, soft_k = {soft_k}")
     for b in range(4):
         B = bands[b]
         for by in range(0, 64, 4):
@@ -189,10 +209,11 @@ def embedding(input1, input2='../ecorp.npy'):
                 #* da capire meglio questo blocco
                 alpha_block = alpha * (1.0 + beta * E_norm) * (1.0 - gamma * attack_score) * lum_mask
                 if E < soft_t * E_mean:
-                    if soft_k == 0.8:
-                        continue  # skip totale per blocchi piatti
-                    else:
-                        alpha_block *= soft_k
+                    continue
+                    #if soft_k == 2:
+                        #continue  # skip totale per blocchi piatti
+                    #else:
+                        #alpha_block *= soft_k
                 alpha_block = float(np.clip(alpha_block, 0.1*alpha, 2.0*alpha))
                 
                  
@@ -204,7 +225,7 @@ def embedding(input1, input2='../ecorp.npy'):
                 # iniezione watermark
                 for k,(u,v) in enumerate(mask):
                     C[u,v] += alpha_block * p_use[k]
-
+                
                 # quantizzazione correttiva
                 for (u,v) in mask:
                     C[u,v] = Q * np.round(C[u,v] / Q)
@@ -214,7 +235,7 @@ def embedding(input1, input2='../ecorp.npy'):
         bands[b] = B
 
 
-    # 6) rimetti le bande modificate dentro coeffs e IDWT
+    # 8) rimetti le bande modificate dentro coeffs e IDWT
     #    (ricostruisci la stessa struttura coeffs con le bande aggiornate)
     new_coeffs = list(coeffs)
     LH3n, HL3n = bands[1], bands[0]

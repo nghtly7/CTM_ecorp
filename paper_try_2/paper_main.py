@@ -18,7 +18,7 @@ from paper_try_2.paper_detection_v1_2 import detection
 from awgn_attack import attacks           # lo script AWGN che hai aggiunto
 
 # cartelle (relativamente alla posizione di questo main)
-INPUT_DIR = os.path.join(ROOT_DIR, "..", "images")
+INPUT_DIR = os.path.join(ROOT_DIR, "sample-images")
 WM_DIR    = os.path.join(ROOT_DIR, "..", "watermarked_images")
 ATT_DIR   = os.path.join(ROOT_DIR, "..", "attacked_images")   # richiesta: salvare attaccate qui
 
@@ -70,6 +70,14 @@ def main(argv):
         if rc != 0:
             print("[TUNING] Errore o exit code diverso da 0. Controlla tuning_output/ e log.")
         return
+    
+    # supporta arg '--tune-per-image' per tuning PER IMMAGINE e uscita immediata
+    if len(argv) > 1 and argv[1] in ("--tune-per-image", "tune-per-image"):
+        rc = run_tuning_per_image(TUNING_SCRIPT)
+        if rc != 0:
+            print("[TUNING] Errore o exit code diverso da 0. Controlla tuning_output/per_image/ e log.")
+        return
+    
     ensure_dir(WM_DIR)
     ensure_dir(ATT_DIR)
 
@@ -84,6 +92,9 @@ def main(argv):
         return
 
     print(f"📌 Trovate {len(images)} immagini. Avvio pipeline (embed -> attack -> detect)...\n")
+    
+    wpsnr_threshold = 58.0
+    count_wpsnr_ge_58 = 0
 
     for img_name in images:
         input_path  = os.path.join(INPUT_DIR, img_name)
@@ -107,6 +118,13 @@ def main(argv):
             wpsnr_val = float('nan')
         print(f"    Watermark embedded. WPSNR between original and watermarked: {wpsnr_val:.2f} dB")
 
+        try:
+            if not (wpsnr_val is None) and (not (wpsnr_val != wpsnr_val)):  # check NaN
+                if wpsnr_val >= wpsnr_threshold:
+                    count_wpsnr_ge_58 += 1
+        except Exception:
+            pass
+        
         # save watermarked image
         cv2.imwrite(wm_path, Iw)
         
@@ -164,6 +182,7 @@ def main(argv):
             print(f"  ==> No successful attack found (wpsnr >= {WPSNR_SUCCESS_THRESH} & watermark destroyed) for {img_name}\n")
         """
     print("🎯 Pipeline completata.")
+    print(f"📊 Immagini con WPSNR >= {wpsnr_threshold:.1f} dB: {count_wpsnr_ge_58}/{len(images)}")
     
 
 if __name__ == "__main__":
