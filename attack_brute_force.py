@@ -3,20 +3,15 @@ import os
 import sys
 import cv2
 import numpy as np
-import random
-import inspect
 import csv
 import uuid
 import glob
-from itertools import zip_longest, combinations
-from math import sqrt
-from typing import List, Union, Dict, Any, Callable
+from itertools import zip_longest
+from typing import List, Dict, Any, Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from scipy.signal import convolve2d, medfilt
-from scipy.ndimage import gaussian_filter
-from PIL import Image
-from skimage.transform import rescale
 from collections import OrderedDict, defaultdict
+
+from attack import attack
 
 OUR_GROUP_NAME = "ecorp"
 ADV_GROUP_NAME = "..." # set the target adversary group name here
@@ -30,181 +25,10 @@ except ImportError:
     wpsnr = None
     print("Warning: wpsnr module not found. WPSNR calculation will be skipped.")
 
-
-# -------------------------
-# Attack implementations
-# -------------------------
-def _awgn(img: np.ndarray, std: float, seed: int, mean: float = 0.0) -> np.ndarray:
-    """Additive White Gaussian Noise (AWGN)."""
-    np.random.seed(seed)
-    attacked = img.astype(np.float32) + np.random.normal(mean, std, img.shape)
-    attacked = np.clip(attacked, 0, 255)
-    return np.uint8(attacked)
-
-
-def _blur_gauss(img: np.ndarray, sigma: list) -> np.ndarray:
-    """Gaussian blur."""
-    attacked = gaussian_filter(img, sigma)
-    return attacked
-
-
-def _blur_median(img: np.ndarray, kernel_size: list) -> np.ndarray:
-    """Median filter (ensure odd kernel sizes)."""
-    kernel_size = [int(k) if int(k) % 2 == 1 else int(k) + 1 for k in kernel_size]
-    if len(kernel_size) == 1:
-        kernel_size = kernel_size[0]
-    attacked = medfilt(img, kernel_size)
-    return attacked
-
-
-def _sharpening(img: np.ndarray, sigma: float, alpha: float) -> np.ndarray:
-    """Unsharp masking (sharpen)."""
-    img_f = img.astype(np.float32)
-    filter_blurred_f = gaussian_filter(img_f, sigma)
-    attacked_f = img_f + alpha * (img_f - filter_blurred_f)
-    attacked_f = np.clip(attacked_f, 0, 255)
-    return np.uint8(attacked_f)
-
-
-def _resizing(img: np.ndarray, scale: float) -> np.ndarray:
-    """Downscale then upscale to simulate resizing artifacts."""
-    x, y = img.shape
-    attacked_f = rescale(img, scale, anti_aliasing=True, mode='reflect')
-    attacked_f = rescale(attacked_f, 1.0/scale, anti_aliasing=True, mode='reflect')
-    attacked_f = np.clip(attacked_f * 255.0, 0, 255)
-    attacked = cv2.resize(attacked_f, (y, x), interpolation=cv2.INTER_LINEAR)
-    return np.uint8(attacked)
-
-
-def _jpeg_compression(img: np.ndarray, QF: int) -> np.ndarray:
-    """JPEG compression via temporary file."""
-    tmp_filename = f'tmp_{uuid.uuid4()}.jpg'
-    img_pil = Image.fromarray(img, mode="L")
-    img_pil.save(tmp_filename, "JPEG", quality=int(QF))
-    attacked = np.asarray(Image.open(tmp_filename), dtype=np.uint8)
-    os.remove(tmp_filename)
-    return attacked
-
-
-def _canny_edge(img: np.ndarray, th1: int = 30, th2: int = 60) -> np.ndarray:
-    """Canny edge detection (helper)."""
-    d = 2
-    edgeresult = img.copy()
-    edgeresult = cv2.GaussianBlur(edgeresult, (2*d + 1, 2*d + 1), -1)[d:-d, d:-d]
-    edgeresult = edgeresult.astype(np.uint8)
-    edges = cv2.Canny(edgeresult, th1, th2)
-    return edges
-
-
-def _gauss_edge(img: np.ndarray, sigma: list, edge_th: list) -> np.ndarray:
-    """Apply Gaussian blur only on detected edges."""
-    edges = _canny_edge(img, th1=edge_th[0], th2=edge_th[1])
-    edges = cv2.resize(edges, (img.shape[1], img.shape[0]))
-    mask = (edges > 0).astype(np.uint8)
-    blurred_img = _blur_gauss(img, sigma)
-    attacked = (img * (1 - mask)) + (blurred_img * mask)
-    return np.uint8(attacked)
-
-
-def _gauss_flat(img: np.ndarray, sigma: list, edge_th: list) -> np.ndarray:
-    """Apply Gaussian blur only on flat (non-edge) regions."""
-    edges = _canny_edge(img, th1=edge_th[0], th2=edge_th[1])
-    edges = cv2.resize(edges, (img.shape[1], img.shape[0]))
-    mask = (edges > 0).astype(np.uint8)
-    blurred_img = _blur_gauss(img, sigma)
-    attacked = (img * mask) + (blurred_img * (1 - mask))
-    return np.uint8(attacked)
-
-
-# -------------------------
-# Attack dispatcher
-# -------------------------
-def attacks(input1: str, attack_name: Union[str, List[str]], param_array: List) -> np.ndarray:
-    """
-    Apply one or more attacks sequentially to the grayscale image at input1.
-    attack_name may be a single string or list of strings; param_array matches it.
-    """
-    img = cv2.imread(input1, cv2.IMREAD_GRAYSCALE)
-    if img is None:
-        raise FileNotFoundError(f"Image not found at path: {input1}")
-
-    attacked_img = img.copy()
-
-    if isinstance(attack_name, str):
-        attack_names = [attack_name]
-        param_list = [param_array]
-    else:
-        attack_names = attack_name
-        param_list = param_array
-
-    for name, params in zip(attack_names, param_list):
-        name = name.lower().strip()
-        try:
-            if name == 'awgn':
-                attacked_img = _awgn(attacked_img, std=params[0], seed=int(params[1]))
-            elif name == 'blur':
-                params = [params] if isinstance(params, (int, float)) else params
-                attacked_img = _blur_gauss(attacked_img, sigma=params)
-            elif name == 'sharp':
-                attacked_img = _sharpening(attacked_img, sigma=params[0], alpha=params[1])
-            elif name == 'median':
-                params = [params] if isinstance(params, (int, float)) else params
-                attacked_img = _blur_median(attacked_img, kernel_size=params)
-            elif name == 'resize':
-                attacked_img = _resizing(attacked_img, scale=float(params[0]))
-            elif name == 'jpeg':
-                attacked_img = _jpeg_compression(attacked_img, QF=int(params[0]))
-            elif name == 'gauss_edge':
-                attacked_img = _gauss_edge(attacked_img, sigma=params[0], edge_th=params[1])
-            elif name == 'gauss_flat':
-                attacked_img = _gauss_flat(attacked_img, sigma=params[0], edge_th=params[1])
-            else:
-                print(f"Warning: Attack '{name}' not recognized and will be skipped.")
-        except Exception as e:
-            print(f"Error applying attack '{name}' with params {params}: {e}. Skipping.")
-            pass
-
-    return attacked_img
-
-
 # -------------------------
 # Brute-force attack generator
 # -------------------------
 def _generate_attack_list() -> List[Dict[str, Any]]:
-    # """Produce ordered single and paired attack combinations (least -> most aggressive)."""
-    # attack_params_db = OrderedDict([
-    #     ('jpeg', ('QF', [[q] for q in range(100, 9, -5)])),
-
-    #     ('blur', ('sigma', [[round(s, 2), round(s, 2)] for s in np.arange(0.2, 3.2, 0.2)])),
-
-    #     ('median', ('kernel_size', [[3, 3], [5, 5], [7, 7], [9, 9]])),
-
-    #     ('awgn', ('std_seed', [[s, 123] for s in [2.5, 5.0, 10.0, 15.0, 20.0, 30.0, 40.0, 50.0]]+ [[s, 42] for s in [5.0, 10.0, 20.0, 40.0]])),
-
-    #     ('resize', ('scale', [[s] for s in [0.98, 0.95, 0.9, 0.85, 0.75, 0.5, 0.3]])),
-
-    #     ('sharp', ('sigma_alpha', [
-    #         [0.3, 0.3], [0.3, 0.6], [0.5, 0.5], [0.5, 1.0],
-    #         [1.0, 0.5], [1.0, 1.0], [1.0, 1.5], [1.5, 1.5],
-    #         [2.0, 1.0], [2.0, 2.0]
-    #     ])),
-
-    #     ('gauss_edge', ('sigma_edge', [
-    #         [[[0.3, 0.3], [20, 40]]],
-    #         [[[0.5, 0.5], [30, 60]]],
-    #         [[[1.0, 1.0], [30, 60]]],
-    #         [[[1.5, 1.5], [50, 100]]],
-    #         [[[2.0, 2.0], [50, 100]]],
-    #     ])),
-
-    #     ('gauss_flat', ('sigma_edge', [
-    #         [[[0.3, 0.3], [20, 40]]],
-    #         [[[0.5, 0.5], [30, 60]]],
-    #         [[[1.0, 1.0], [30, 60]]],
-    #         [[[1.5, 1.5], [50, 100]]],
-    #         [[[2.0, 2.0], [50, 100]]],
-    #     ])),
-    # ])
     """Produce ordered single and paired attack combinations (least -> most aggressive)."""
     attack_params_db = OrderedDict([
         ('jpeg', ('QF', [[q] for q in range(95, 29, -5)])),
@@ -272,7 +96,7 @@ def _evaluate_single_attack(
             raise ValueError("attack_combo['params'] is None.")
 
         # Apply attacks
-        attacked_img = attacks(watermarked_path, attack_names, attack_params)
+        attacked_img = attack(watermarked_path, attack_names, attack_params)
 
         # Validate attacked image
         if attacked_img is None:
@@ -518,7 +342,7 @@ if __name__ == "__main__":
 
         if best_attack_found:
             print("\nGenerating final attacked image with best attack...")
-            final_attacked_img = attacks(
+            final_attacked_img = attack(
                 watermarked_path,
                 best_attack_found["names"],
                 best_attack_found["params"]

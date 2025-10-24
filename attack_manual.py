@@ -4,7 +4,8 @@ import uuid
 import importlib
 import cv2
 
-from attack_brute_force import attacks, save_attack_to_log
+from attack_brute_force import save_attack_to_log
+from attack import attack
 
 OUR_GROUP_NAME = "ecorp"
 ADV_GROUP_NAME = "..."  # set the target adversary group name here
@@ -109,9 +110,9 @@ def main():
         sys.exit(1)
 
     # Apply attack
-    attacked_img = attacks(WATERMARKED_PATH, attack_names, param_values)
+    attacked_img = attack(WATERMARKED_PATH, attack_names, param_values)
     if attacked_img is None:
-        print("Error: attacks(...) returned None")
+        print("Error: attack(...) returned None")
         sys.exit(1)
 
     # Save temporary attacked image for detection
@@ -139,11 +140,11 @@ def main():
         print(f"Found={found}, WPSNR={wpsnr_val:.2f} dB")
 
         csv_result = os.path.join(RESULTS_FOLDER, "result.csv")
-        attack = {
+        attack_res = {
             "names": attack_names,
             "params": param_values
         }
-        save_attack_to_log(ADV_GROUP_NAME, ORIGINAL_NAME, attack, wpsnr_val, csv_result)
+        save_attack_to_log(ADV_GROUP_NAME, ORIGINAL_NAME, attack_res, wpsnr_val, csv_result)
     else:
         print(f"Attack not successful. Found={found}, WPSNR={wpsnr_val:.2f} dB")
         sys.exit(0)
