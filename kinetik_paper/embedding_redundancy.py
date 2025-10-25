@@ -36,7 +36,7 @@ def _permute_patterns(bipolar):
     p2 = np.roll(bipolar, shift=1, axis=0)  # shift rows
     p3 = np.roll(bipolar, shift=1, axis=1)  # shift cols
     return p1, p2, p3
-
+    
 def embedding(input1, input2="ecorp.npy"):
     """
     Embedding C: redundant/spread embedding by superposing three permutations of the bipolar pattern.

@@ -5,7 +5,7 @@ from sklearn.metrics import roc_curve, auc
 import matplotlib.pyplot as plt
 import random
 
-from paper_try_2.paper_embedding_v1 import embedding
+from paper_try_2.embedding import embedding
 from paper_try_2.paper_detection_v1 import extraction
 from similarity import similarity
 

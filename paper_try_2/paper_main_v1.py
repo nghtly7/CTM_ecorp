@@ -13,8 +13,8 @@ sys.path.append(ROOT_DIR)
 from wpsnr import wpsnr
 # from paper_try_2.paper_embedding_v2 import embedding_v2
 # from paper_try_2.paper_detection_v2 import detection_v2     # la tua detection file (single file)
-from paper_try_2.paper_embedding_v1_stronger import embedding
-from paper_try_2.paper_detection_v1_stronger import detection
+from paper_try_2.embedding_stronger import embedding
+from paper_try_2.detection_stronger import detection
 from awgn_attack import attacks           # lo script AWGN che hai aggiunto
 
 # cartelle (relativamente alla posizione di questo main)
