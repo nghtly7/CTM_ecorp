@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import pywt
 
-def embedding(input1, input2="../ecorp.npy"):
+def embedding(input1, input2="ecorp.npy"):
     """
     DWT-DCT embedding con alpha adattivo + maschera HVS + auto-tuning su kappa.
     - input1: path immagine originale (512x512, grayscale)
