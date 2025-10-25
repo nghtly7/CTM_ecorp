@@ -418,16 +418,16 @@ if __name__ == "__main__":
             output_path = os.path.join(RESULTS_FOLDER, output_filename)
             cv2.imwrite(output_path, final_attacked_img)
             print(f"Done. '{output_path}' is ready to be uploaded.")
-
-            csv_result = os.path.join(RESULTS_FOLDER, "result.csv")
-            save_attack_to_log(
-                ADV_GROUP_NAME,
-                original_image_name,
-                best_attack_found,
-                final_wpsnr,
-                csv_result
-            )
         else:
             print(f"No successful attack found for {original_image_name}.")
+        
+        csv_result = os.path.join(RESULTS_FOLDER, "result.csv")
+        save_attack_to_log(
+            ADV_GROUP_NAME,
+            original_image_name,
+            best_attack_found,
+            final_wpsnr,
+            csv_result
+        )
 
     print("\n\nAll images processed. Attack run complete.")
