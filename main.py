@@ -15,22 +15,20 @@ from wpsnr import wpsnr
 #from jimaging_paper.embedding import embedding as embedding
 #from jimaging_paper.detection import detection as detection
 
-#! failure
-#from kinetik_paper.embedding_standard import embedding as embedding
-#from kinetik_paper.detection_standard import detection as detection
-#from kinetik_paper.embedding_normalization import embedding as embedding
-#from kinetik_paper.detection_normalization import detection as detection
-#from kinetik_paper.embedding_redundancy import embedding as embedding
-#from kinetik_paper.detection_redundancy import detection as detection
-
 #! tutti con wpsnr >=54, da capire come rendere più robusto
-from paper_try_2.embedding_stronger import embedding
-from paper_try_2.detection_stronger import detection
+#from paper_try_2.embedding_stronger import embedding
+#from paper_try_2.detection_stronger import detection
+# from paper_try_2.embedding_stronger_v2 import embedding
+# from paper_try_2.detection_stronger_v2 import detection
 
-from paper_try_2.awgn_attack import attacks           
+#embedding from nico
+from embedding_nico.embedding_nico import embedding
+from embedding_nico.detection_nico import detection
+
+from attacks.awgn_attack import attacks           
 
 # cartelle (relativamente alla posizione di questo main)
-INPUT_DIR = os.path.join("sample-images")
+INPUT_DIR = os.path.join("images")
 WM_DIR    = os.path.join("watermarked_images")
 ATT_DIR   = os.path.join("attacked_images")   # richiesta: salvare attaccate qui
 
@@ -68,8 +66,10 @@ def main():
 
     print(f"📌 Trovate {len(images)} immagini. Avvio pipeline (embed -> attack -> detect)...\n")
     
-    wpsnr_threshold = 59.0
+    wpsnr_threshold = 58.0
+    wpsnr_threshold_2 = 54.0
     count_wpsnr_ge_58 = 0
+    count_wpsnr_ge_54 = 0
 
     for img_name in images:
         input_path  = os.path.join(INPUT_DIR, img_name)
@@ -97,13 +97,15 @@ def main():
             if not (wpsnr_val is None) and (not (wpsnr_val != wpsnr_val)):  # check NaN
                 if wpsnr_val >= wpsnr_threshold:
                     count_wpsnr_ge_58 += 1
+                if wpsnr_val >= wpsnr_threshold_2:
+                    count_wpsnr_ge_54 += 1
         except Exception:
             pass
         
         # save watermarked image
         cv2.imwrite(wm_path, Iw)
         
-        """
+        """"""
         
         # 2) Attack: AWGN progressive -> save into per-image subfolder inside ATT_DIR
         #    create a dedicated folder per original filename to avoid name collisions
@@ -156,9 +158,10 @@ def main():
             print(f"  ==> ATTACK SUCCESSFUL for at least one noise level on {img_name}\n")
         else:
             print(f"  ==> No successful attack found (wpsnr >= {WPSNR_SUCCESS_THRESH} & watermark destroyed) for {img_name}\n")
-        """
+        """"""
     print("🎯 Pipeline completata.")
     print(f"📊 Immagini con WPSNR >= {wpsnr_threshold:.1f} dB: {count_wpsnr_ge_58}/{len(images)}")
+    print(f"📊 Immagini con WPSNR >= {wpsnr_threshold_2:.1f} dB: {count_wpsnr_ge_54}/{len(images)}")
     
 
 if __name__ == "__main__":

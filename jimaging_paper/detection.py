@@ -70,6 +70,12 @@ def _load_tau(path="threshold_tau.txt", default=0.9):
     except Exception:
         return float(default)
 
+def similarity(X,X_star):
+    #Computes the similarity measure between the original and the new watermarks.
+    s = np.sum(np.multiply(X, X_star)) / (np.sqrt(np.sum(np.multiply(X, X))) * np.sqrt(np.sum(np.multiply(X_star, X_star))))
+    return s
+
+
 # ---------------------------
 # Estrattore di bit (coerente con embedding.py)
 # ---------------------------
@@ -190,7 +196,7 @@ def detection(input1, input2, input3, key=12345):
     W_a = _extract_bits_from_image_uint8(Ia_aligned, key)
 
     # Similarità (Normalized Correlation)
-    sim = _normalized_correlation(W_w, W_a)
+    sim = similarity(W_w, W_a)
 
     # Decisione con tau caricato da file (fallback)
     tau = _load_tau("threshold_tau.txt", default=0.9)

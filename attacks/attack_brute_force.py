@@ -34,8 +34,13 @@ try:
 except ImportError:
     wpsnr = None
     print("Warning: wpsnr module not found. WPSNR calculation will be skipped.")
-
-
+    
+# -------------------------
+# Verbosity control
+# -------------------------
+VERBOSE = False   # set True to enable per-attack debug prints
+    
+    
 # -------------------------
 # Attack implementations
 # -------------------------
@@ -255,7 +260,6 @@ def _evaluate_single_attack(
 ) -> tuple:
     """
     Apply attack combo, run adversary detection, and compute WPSNR.
-    More robust and verbose for debugging.
     Returns (is_successful, wpsnr_val, attack_combo).
     """
     attack_names = attack_combo.get("names")
@@ -266,8 +270,9 @@ def _evaluate_single_attack(
         f"tmp_attack_{uuid.uuid4()}.bmp"
     )
 
-    # Debug header
-    print(f"[Debug] Worker {os.getpid()} - testing attack: {attack_names} params: {attack_params}")
+    # Debug header (print only if VERBOSE)
+    if VERBOSE:
+        print(f"[Debug] Worker {os.getpid()} - testing attack: {attack_names} params: {attack_params}")
 
     try:
         # Validate inputs
@@ -322,9 +327,13 @@ def _evaluate_single_attack(
         return (is_successful, float(wpsnr_val), attack_combo)
 
     except Exception as e:
-        # Print full traceback + contextual info (very useful)
-        print(f"[Worker ERROR] attack={attack_names} params={attack_params} -> {e}")
-        traceback.print_exc()
+        # Print short contextual error (full traceback only if VERBOSE)
+        if VERBOSE:
+            print(f"[Worker ERROR] attack={attack_names} params={attack_params} -> {e}")
+            traceback.print_exc()
+        else:
+            # minimal error log (keeps console cleaner)
+            print(f"[Worker ERROR] attack={attack_names} -> {e}")
         return (False, 0.0, attack_combo)
     finally:
         if os.path.exists(tmp_path):
@@ -332,6 +341,7 @@ def _evaluate_single_attack(
                 os.remove(tmp_path)
             except Exception:
                 pass
+
 
 def _run_attack_type_worker(
     original_path: str,

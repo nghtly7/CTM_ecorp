@@ -15,7 +15,7 @@ from wpsnr import wpsnr
 # from paper_try_2.paper_detection_v2 import detection_v2     # la tua detection file (single file)
 from paper_try_2.embedding_stronger import embedding
 from paper_try_2.detection_stronger import detection
-from awgn_attack import attacks           # lo script AWGN che hai aggiunto
+from attacks.awgn_attack import attacks           # lo script AWGN che hai aggiunto
 
 # cartelle (relativamente alla posizione di questo main)
 INPUT_DIR = os.path.join(ROOT_DIR, "images")
