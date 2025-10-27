@@ -45,10 +45,10 @@ os.makedirs(ATT_DIR, exist_ok=True)
 
 # ---- import detection helpers (extraction, similarity, wpsnr)
 try:
-    import detection as detmod
+    import ecorp_detection as detmod
 except Exception:
     try:
-        from paper_try_2 import detection as detmod
+        from final_strategy import detection as detmod
     except Exception:
         raise ImportError("Impossibile importare paper_detection_v1; assicurati sia nel PYTHONPATH.")
 

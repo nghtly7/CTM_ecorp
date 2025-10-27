@@ -3,35 +3,15 @@ import os
 #import sys
 import cv2
 
-# assicuriamoci di poter importare wpsnr dalla cartella superiore
-
 from wpsnr import wpsnr
 
-#! tutti con wpsnr >=58 ma 91/101 con wpsnr >=59 forse migliorabile
-#from AIIW_paper.embedding import embedding as embedding
-#from AIIW_paper.detection import detection as detection
+from final_strategy.ecorp_embedding import embedding
+from final_strategy.ecorp_detection import detection
 
-#! 92/101 con wpsnr >=58
-#from jimaging_paper.embedding import embedding as embedding
-#from jimaging_paper.detection import detection as detection
-
-#! tutti con wpsnr >=54, da capire come rendere più robusto
-#from paper_try_2.embedding_stronger import embedding
-#from paper_try_2.detection_stronger import detection
-# from paper_try_2.embedding_stronger_v2 import embedding
-# from paper_try_2.detection_stronger_v2 import detection
-# from paper_try_2.embedding import embedding
-# from paper_try_2.detection import detection
-from paper_try_2.cose_inutili_qua_dentro.paper_embedding_v1_2 import embedding
-
-#! embedding from nico
-# from embedding_nico.embedding_nico import embedding
-# from embedding_nico.detection_nico import detection
-
-from attacks.awgn_attack import attacks           
+from attacks.awgn_attack import attacks          
 
 # cartelle (relativamente alla posizione di questo main)
-INPUT_DIR = os.path.join("sample-images")
+INPUT_DIR = os.path.join("input_images/images")
 WM_DIR    = os.path.join("watermarked_images")
 ATT_DIR   = os.path.join("attacked_images")   # richiesta: salvare attaccate qui
 
@@ -39,7 +19,7 @@ ATT_DIR   = os.path.join("attacked_images")   # richiesta: salvare attaccate qui
 # parametri AWGN per il test (modificabili)
 AWGN_PARAMS = {
     "sigma_start": 0.5,
-    "sigma_end": 20.0,
+    "sigma_end": 100.0,
     "n_steps": 12,
     "seed": 12345,
     # "out_dir" verrà impostato dinamicamente per ogni immagine su ATT_DIR
@@ -108,7 +88,7 @@ def main():
         # save watermarked image
         cv2.imwrite(wm_path, Iw)
         
-        """
+        """"""
         
         # 2) Attack: AWGN progressive -> save into per-image subfolder inside ATT_DIR
         #    create a dedicated folder per original filename to avoid name collisions
@@ -161,7 +141,7 @@ def main():
             print(f"  ==> ATTACK SUCCESSFUL for at least one noise level on {img_name}\n")
         else:
             print(f"  ==> No successful attack found (wpsnr >= {WPSNR_SUCCESS_THRESH} & watermark destroyed) for {img_name}\n")
-        """
+        """"""
     print("🎯 Pipeline completata.")
     print(f"📊 Immagini con WPSNR >= {wpsnr_threshold:.1f} dB: {count_wpsnr_ge_58}/{len(images)}")
     print(f"📊 Immagini con WPSNR >= {wpsnr_threshold_2:.1f} dB: {count_wpsnr_ge_54}/{len(images)}")

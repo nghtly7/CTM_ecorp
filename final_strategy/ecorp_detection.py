@@ -8,8 +8,7 @@ WAVELET = "db2"
 LEVELS = 3
 MASK_IDX = [(0,1),(1,0),(1,1),(2,0),(0,2),(2,1),(1,2)]
 EPS = 1e-8
-TAU = 0.517647   # decision threshold (keep as in your previous code)
-# TAU = 0.75   # decision threshold (tuned for stronger embedding v2)
+TAU = 0.525185   # decision threshold (keep as in your previous code)
 
 _rng = np.random.default_rng(FIXED_SEED)
 _PN0 = _rng.standard_normal(len(MASK_IDX)).astype(np.float32)

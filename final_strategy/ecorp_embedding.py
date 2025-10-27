@@ -16,6 +16,7 @@ def embedding(input1, input2="ecorp.npy"):
     # Parametri "interni" (tunabili editando il file)
     # ---------------------------
     TARGET_WPSNR = 54.00
+    
     MAX_ITERS    = 10
     WAVELET      = "db2"
     LEVELS       = 3

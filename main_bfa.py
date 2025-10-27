@@ -38,7 +38,7 @@ except Exception as e:
 # ----------------------
 # Config (modifica se vuoi)
 # ----------------------
-INPUT_DIR = os.path.join(ROOT, "images_10_20")          # dove prendere le immagini originali (.bmp)
+INPUT_DIR = os.path.join(ROOT, "input_images/images_worst")          # dove prendere le immagini originali (.bmp)
 OUT_WM_ROOT = os.path.join(ROOT, "watermarked_images")  # salvataggio watermarked per strategia
 OUT_ATT_ROOT = os.path.join(ROOT, "attacked_images")    # salvataggio attacked per strategia+image (debug)
 CSV_SUMMARY = os.path.join(ROOT, "attack_summary.csv")
@@ -52,14 +52,8 @@ WPSNR_SUCCESS_THRESH = 35.0
 # detection_import_path should point to a module exporting `detection`
 # if detection_import_path is None we try to import detection from same module as embedding
 STRATEGIES_CANDIDATES = [
-    ("paper_stronger_v2", "paper_try_2.embedding_stronger_v2", "paper_try_2.detection_stronger_v2"),
-    # ("paper_stronger_v1", "paper_try_2.embedding_stronger", "paper_try_2.detection_stronger"),
-    # ("embedding_baseline", "paper_try_2.embedding", "paper_try_2.detection"),
-    # ("aiiw", "AIIW_paper.embedding", "AIIW_paper.detection"),
-    # ("jimaging", "jimaging_paper.embedding", "jimaging_paper.detection"),
-    # ("nico_embedding", "embedding_nico.embedding_nico", "embedding_nico.detection_nico"),
-    # ("kinetik_std", "kinetik_paper.embedding_standard", "kinetik_paper.detection_standard"),
-    # ("kinetik_red", "kinetik_paper.embedding_redundancy", "kinetik_paper.detection_redundancy"),
+    ("paper_stronger_v2", "final_strategy.ecorp_embedding", "final_strategy.ecorp_detection"),
+
 ]
 
 # ensure output folders
