@@ -74,7 +74,7 @@ soft_k = 0.6
 # soft_k = 1.0 # al momento nemmeno usato
 # band_scale = [1.0, 1.0, 0.7, 0.7]   # bande fini più forti, bande grossolane più deboli
 
-def embedding(input1, input2='ecorp.npy'):
+def embedding(input1, input2='../ecorp.npy'):
     
     # Parametri embedding
     alpha = 3.0     # embedding strength (aumentato per robustezza)
@@ -173,7 +173,7 @@ def embedding(input1, input2='ecorp.npy'):
     # soft_t = 0.15   # soglia blocchi piatti (15% sotto l'energia media)
     # soft_k = 0.6
     # Q = 0.6  # quantizzazione correttiva
-    from paper_embedding_v1_2 import beta, gamma, soft_t, soft_k, Q
+    #from paper_embedding_v1_2 import beta, gamma, soft_t, soft_k, Q
     #print(f"  [embedding] alpha final = {alpha:.4f}, Q = {Q}, beta = {beta}, gamma = {gamma}, soft_t = {soft_t}, soft_k = {soft_k}")
     for b in range(4):
         B = bands[b]

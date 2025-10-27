@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import pywt
 
-def embedding(input1, input2):
+def embedding(input1, input2="ecorp.npy"):
     
     # Parameters
     alpha = 3.0     # Embedding strength

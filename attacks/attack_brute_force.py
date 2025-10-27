@@ -21,6 +21,7 @@ from collections import OrderedDict, defaultdict
 OUR_GROUP_NAME = "ecorp"
 ADV_GROUP_NAME = "..." # set the target adversary group name here
 RESULTS_FOLDER = "attack_results"
+WPSNR_TRESHHOLD = 15.0  # minimum WPSNR for successful attack
 
 # Ensure project root is importable
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -181,40 +182,40 @@ def attacks(input1: str, attack_name: Union[str, List[str]], param_array: List) 
 # Brute-force attack generator
 # -------------------------
 def _generate_attack_list() -> List[Dict[str, Any]]:
-    # """Produce ordered single and paired attack combinations (least -> most aggressive)."""
-    # attack_params_db = OrderedDict([
-    #     ('jpeg', ('QF', [[q] for q in range(100, 9, -5)])),
+    """Produce ordered single and paired attack combinations (least -> most aggressive)."""
+    attack_params_db = OrderedDict([
+        ('jpeg', ('QF', [[q] for q in range(100, 9, -5)])),
 
-    #     ('blur', ('sigma', [[round(s, 2), round(s, 2)] for s in np.arange(0.2, 3.2, 0.2)])),
+        ('blur', ('sigma', [[round(s, 2), round(s, 2)] for s in np.arange(0.2, 3.2, 0.2)])),
 
-    #     ('median', ('kernel_size', [[3, 3], [5, 5], [7, 7], [9, 9]])),
+        ('median', ('kernel_size', [[3, 3], [5, 5], [7, 7], [9, 9]])),
 
-    #     ('awgn', ('std_seed', [[s, 123] for s in [2.5, 5.0, 10.0, 15.0, 20.0, 30.0, 40.0, 50.0]]+ [[s, 42] for s in [5.0, 10.0, 20.0, 40.0]])),
+        ('awgn', ('std_seed', [[s, 123] for s in [2.5, 5.0, 10.0, 15.0, 20.0, 30.0, 40.0, 50.0]]+ [[s, 42] for s in [5.0, 10.0, 20.0, 40.0]])),
 
-    #     ('resize', ('scale', [[s] for s in [0.98, 0.95, 0.9, 0.85, 0.75, 0.5, 0.3]])),
+        ('resize', ('scale', [[s] for s in [0.98, 0.95, 0.9, 0.85, 0.75, 0.5, 0.3]])),
 
-    #     ('sharp', ('sigma_alpha', [
-    #         [0.3, 0.3], [0.3, 0.6], [0.5, 0.5], [0.5, 1.0],
-    #         [1.0, 0.5], [1.0, 1.0], [1.0, 1.5], [1.5, 1.5],
-    #         [2.0, 1.0], [2.0, 2.0]
-    #     ])),
+        ('sharp', ('sigma_alpha', [
+            [0.3, 0.3], [0.3, 0.6], [0.5, 0.5], [0.5, 1.0],
+            [1.0, 0.5], [1.0, 1.0], [1.0, 1.5], [1.5, 1.5],
+            [2.0, 1.0], [2.0, 2.0]
+        ])),
 
-    #     ('gauss_edge', ('sigma_edge', [
-    #         [[[0.3, 0.3], [20, 40]]],
-    #         [[[0.5, 0.5], [30, 60]]],
-    #         [[[1.0, 1.0], [30, 60]]],
-    #         [[[1.5, 1.5], [50, 100]]],
-    #         [[[2.0, 2.0], [50, 100]]],
-    #     ])),
+        ('gauss_edge', ('sigma_edge', [
+            [[[0.3, 0.3], [20, 40]]],
+            [[[0.5, 0.5], [30, 60]]],
+            [[[1.0, 1.0], [30, 60]]],
+            [[[1.5, 1.5], [50, 100]]],
+            [[[2.0, 2.0], [50, 100]]],
+        ])),
 
-    #     ('gauss_flat', ('sigma_edge', [
-    #         [[[0.3, 0.3], [20, 40]]],
-    #         [[[0.5, 0.5], [30, 60]]],
-    #         [[[1.0, 1.0], [30, 60]]],
-    #         [[[1.5, 1.5], [50, 100]]],
-    #         [[[2.0, 2.0], [50, 100]]],
-    #     ])),
-    # ])
+        ('gauss_flat', ('sigma_edge', [
+            [[[0.3, 0.3], [20, 40]]],
+            [[[0.5, 0.5], [30, 60]]],
+            [[[1.0, 1.0], [30, 60]]],
+            [[[1.5, 1.5], [50, 100]]],
+            [[[2.0, 2.0], [50, 100]]],
+        ])),
+    ])
     """Produce ordered single and paired attack combinations (least -> most aggressive)."""
     attack_params_db = OrderedDict([
         ('jpeg', ('QF', [[q] for q in range(95, 29, -5)])),
@@ -322,7 +323,7 @@ def _evaluate_single_attack(
             raise ValueError(f"WPSNR value not convertible to float: {wpsnr_val}")
 
         # Success criteria: watermark not found (0) AND wpsnr is high
-        is_successful = (found == 0 and wpsnr_val >= 35.0)
+        is_successful = (found == 0 and wpsnr_val >= WPSNR_TRESHHOLD)
 
         return (is_successful, float(wpsnr_val), attack_combo)
 
@@ -424,7 +425,7 @@ def find_best_attack(
 
     if best_attack is None:
         print("\n--- Brute-Force Complete ---")
-        print("No successful attack found that meets WPSNR >= 35 criteria.")
+        print("No successful attack found that meets WPSNR >=", WPSNR_TRESHHOLD, " criteria.")
         return None, 0.0
     else:
         print("\n--- Brute-Force Complete ---")

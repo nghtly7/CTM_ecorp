@@ -117,18 +117,18 @@ def embedding(input1, input2="ecorp.npy"):
         Iw_f = pywt.waverec2(new_coeffs, wavelet='db2')
         return np.clip(Iw_f, 0, 255).astype(np.float32)
 
-    def _wpsnr_wrapper(Au8: np.ndarray, Bu8: np.ndarray) -> float:
-        # Usa la tua WPSNR dal detection (CSF) per coerenza challenge
+    # ---------------------------
+    # WPSNR wrapper (usa la tua implementazione)
+    # ---------------------------
+    def _wpsnr_wrapper(Au8, Bu8) -> float:
         try:
-            # Se i moduli sono nello stesso folder
-            from paper_detection_v1 import wpsnr as _wpsnr
+            from wpsnr import wpsnr as _wpsnr
         except Exception:
             try:
-                # Se hai una package path (adatta se serve)
-                from paper_try_2.paper_detection_v1 import wpsnr as _wpsnr
+                from wpsnr import wpsnr as _wpsnr
             except Exception:
-                raise ImportError("Impossibile importare wpsnr() dalla detection. Assicurati che sia nel PYTHONPATH.")
-        return float(_wpsnr(Au8, Bu8))  # la tua implementazione gestisce normalizzazioni
+                raise ImportError("[embedding] Impossibile importare wpsnr() dalla detection.")
+        return float(_wpsnr(Au8, Bu8))
 
     # ---------------------------
     # Auto-tuning su kappa (bisection)
