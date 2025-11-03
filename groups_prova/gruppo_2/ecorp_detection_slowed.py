@@ -3,20 +3,17 @@ import numpy as np
 from scipy.signal import convolve2d
 import pywt
 import time
-import warnings
-
-#   disattivare i warmning di runtime (es. division by zero)
-warnings.filterwarnings("ignore", category=RuntimeWarning)
-np.seterr(all="ignore")
 
 FIXED_SEED = 42
 WAVELET = "db2"
 LEVELS = 3
 MASK_IDX = [(0,1),(1,0),(1,1),(2,0),(0,2),(2,1),(1,2)]
 EPS = 1e-8
-TAU = 0.546026  # decision threshold
-MIN_DETECTION_TIME = 4.0 
+# TAU = 0.525185   # decision threshold
+TAU = 0.536124   # decision threshold
 
+
+MIN_DETECTION_TIME = 4.0
 
 _rng = np.random.default_rng(FIXED_SEED)
 _PN0 = _rng.standard_normal(len(MASK_IDX)).astype(np.float32)
@@ -35,7 +32,7 @@ _PN1_H = _PN1 * HVS_WEIGHTS
 
 _DELTA_PN = (_PN1_H - _PN0_H).astype(np.float32)
 _DELTA_PN_NORM = _DELTA_PN / (np.linalg.norm(_DELTA_PN) + EPS)
-# ---
+
 
 def _load_image_gray(path: str) -> np.ndarray:
     """Load grayscale image, raise descriptive error if not found."""
@@ -257,20 +254,19 @@ def detection(original_path: str, wm_path: str, attacked_path: str) -> tuple:
         - present_flag: int (1 if watermark present, 0 otherwise)
         - wpsnr_value: float (wpsnr(wm, attacked) or PSNR fallback)
     """
-    
-    t0 = time.time()
-    
+    t0 = time.time() 
     # extract bits from watermarked and attacked (relative to original)
     bits_w = extraction(original_path, wm_path)
     bits_a = extraction(original_path, attacked_path)
 
+    # compute similarity (1 - normalized Hamming distance)
     sim = similarity(bits_w.astype(np.float32), bits_a.astype(np.float32))
+
 
     # compute wpsnr between watermarked and attacked (for logging / thresholds)
     I_w = _load_image_gray(wm_path)
     I_a = _load_image_gray(attacked_path)
-    
-    # pass clean uint8 images to wpsnr (avoids range error)
+    # passiamo uint8 puliti a wpsnr (evita l'errore di range)
     I_w_u8 = np.clip(I_w, 0, 255).astype(np.uint8)
     I_a_u8 = np.clip(I_a, 0, 255).astype(np.uint8)
     wpsnr_val = wpsnr(I_w_u8, I_a_u8)
@@ -278,8 +274,7 @@ def detection(original_path: str, wm_path: str, attacked_path: str) -> tuple:
     present_flag = 1 if sim >= TAU else 0
     
     elapsed = time.time() - t0
-    #if elapsed < MIN_DETECTION_TIME:
-        #time.sleep(MIN_DETECTION_TIME - elapsed)
-        
-        
+    if elapsed < MIN_DETECTION_TIME:
+        time.sleep(MIN_DETECTION_TIME - elapsed)
+
     return int(present_flag), float(wpsnr_val)

@@ -16,7 +16,7 @@ def embedding(input1, input2="ecorp.npy"):
     # Parametri "interni" (tunabili editando il file)
     # ---------------------------
     TARGET_WPSNR = 54.00
-    MAX_ITERS    = 10
+    MAX_ITERS    = 25
     WAVELET      = "db2"
     LEVELS       = 3
     FIXED_SEED   = 42
@@ -24,17 +24,17 @@ def embedding(input1, input2="ecorp.npy"):
 
     # Pesi per banda: L3 più “forte” di L2
     BAND_WEIGHTS = {
-        ("HL", 3): 1.00,
-        ("LH", 3): 1.00,
-        ("HL", 2): 0.65,
-        ("LH", 2): 0.65,
+        ("HL", 3): 1.20,
+        ("LH", 3): 1.15,
+        ("HL", 2): 0.70,
+        ("LH", 2): 0.70,
     }
 
     # Maschera HVS coeff-per-coeff sui 7 mid-band (4x4 DCT)
-    HVS_WEIGHTS = np.array([0.55, 0.60, 0.95, 1.05, 1.05, 1.15, 1.15], dtype=np.float32)
+    HVS_WEIGHTS = np.array([0.55, 0.60, 0.95, 1.10, 1.10, 1.25, 1.25], dtype=np.float32)
 
     # Esponente per l’attività: alpha_base ∝ (std_midband)^gamma
-    ACTIVITY_GAMMA = 0.55
+    ACTIVITY_GAMMA = 0.65
 
     # ---------------------------
     # I/O robusto
@@ -76,8 +76,8 @@ def embedding(input1, input2="ecorp.npy"):
     # ---------------------------
     MASK_IDX = [(0,1),(1,0),(1,1),(2,0),(0,2),(2,1),(1,2)]
     rng = np.random.default_rng(FIXED_SEED)
-    PN0 = rng.standard_normal(len(MASK_IDX)).astype(np.float32)
-    PN1 = rng.standard_normal(len(MASK_IDX)).astype(np.float32)
+    PN0 = rng.standard_normal(len(MASK_IDX)) * 1.5
+    PN1 = rng.standard_normal(len(MASK_IDX)) * 1.5  
     # Ortonormalizzazione (migliora distinzione 0/1)
     PN0 = PN0 / (np.linalg.norm(PN0) + EPS)
     PN1 = PN1 - (PN0 @ PN1) * PN0
@@ -114,6 +114,12 @@ def embedding(input1, input2="ecorp.npy"):
                     # Activity: std dei 7 mid-band del blocco
                     mb = np.array([C[u,v] for (u,v) in MASK_IDX], dtype=np.float32)
                     mb_std = float(np.std(mb))
+                    
+                    # 🔸 SKIP opzionale per blocchi troppo piatti
+                    if mb_std < 1.5:      # ← puoi regolare la soglia 1.5 in base al tipo d’immagine
+                        idx += 1
+                        continue
+                    
                     # α di base (activity^gamma) con peso banda
                     alpha_base = kappa * r_band * (mb_std + EPS)**ACTIVITY_GAMMA
                     # Equalizzazione per blocco: rende l'effetto più uniforme
@@ -171,3 +177,69 @@ def embedding(input1, input2="ecorp.npy"):
         best_Iw = Iw_hi if W_hi >= TARGET_WPSNR else _embed_with_kappa(k_lo)
 
     return np.clip(best_Iw, 0, 255).astype(np.uint8)
+
+
+# ================================================================
+# 🎛️  PARAMETRI AVANZATI DI TUNING DELL'EMBEDDING
+# ================================================================
+# Questi parametri controllano *dove* e *come* viene distribuita
+# l'energia del watermark all’interno delle bande DWT/DCT.
+# L’auto-tuning di kappa garantirà comunque che il WPSNR finale
+# resti ≥ TARGET_WPSNR (54 dB), quindi puoi spingere la robustezza
+# senza rischiare di scendere sotto la soglia percettiva.
+#
+# 📌 PARAMETRI CHIAVE
+# ------------------------------------------------
+# 1) BAND_WEIGHTS → bilancia la potenza fra bande
+#    • HL3/LH3 (livello 3)  → frequenze più basse, più robuste
+#    • HL2/LH2 (livello 2)  → frequenze più alte, più sensibili
+#    → Aumentare HL3/LH3 migliora la robustezza JPEG e resize.
+#      Range consigliato:
+#         L3 = 1.0–1.5
+#         L2 = 0.6–0.9
+#    Esempio “robusto”:
+#         ("HL",3): 1.35, ("LH",3): 1.30,
+#         ("HL",2): 0.70, ("LH",2): 0.70
+#
+# 2) HVS_WEIGHTS → pesi percettivi sui 7 coeff. mid-band DCT
+#    • I primi due valori (0.55–0.60) corrispondono a freq. basse,
+#      mantenere < 0.7 per evitare artefatti visivi.
+#    • Gli ultimi valori (1.15–1.35) sono le freq. più alte e possono
+#      essere aumentati per migliorare la robustezza a compressione.
+#    Esempio “robusto JPEG”:
+#         [0.55, 0.60, 0.95, 1.10, 1.10, 1.30, 1.35]
+#
+# 3) ACTIVITY_GAMMA → controlla l’adattività locale
+#    α_base ∝ (std_midband)^γ
+#    • Maggiore γ (0.7–0.8) → watermark più forte nelle zone ricche
+#      di texture, invisibile nelle zone piatte.
+#    • Minore γ (0.45–0.55) → distribuzione più uniforme (immagini lisce).
+#    Tipicamente: 0.60–0.75 bilancia bene robustezza e invisibilità.
+#
+# 4) SKIP DI BLOCCHI PIATTI (facoltativo)
+#    Se vuoi evitare embedding in blocchi troppo omogenei:
+#        if mb_std < 1.8: continue
+#    • Concentra l’energia nei blocchi “sicuri”.
+#      Range utile: 1.5–2.0.
+#
+# Tutti questi parametri vengono poi scalati automaticamente da kappa
+# per rispettare il TARGET_WPSNR → puoi testarli liberamente.
+#
+# PROFILI ESEMPLIFICATIVI
+# ------------------------------------------------
+# • Bilanciato (default robusto):
+#       BAND_WEIGHTS = {("HL",3):1.20,("LH",3):1.15,("HL",2):0.70,("LH",2):0.70}
+#       HVS_WEIGHTS  = [0.55,0.60,0.95,1.10,1.10,1.25,1.25]
+#       ACTIVITY_GAMMA = 0.65
+#
+# • Profilo JPEG/resize aggressivo:
+#       BAND_WEIGHTS = {("HL",3):1.35,("LH",3):1.30,("HL",2):0.70,("LH",2):0.70}
+#       HVS_WEIGHTS  = [0.55,0.60,0.95,1.10,1.15,1.30,1.35]
+#       ACTIVITY_GAMMA = 0.75–0.80
+#       mb_std skip ≈ 1.8
+#
+# • Profilo rumore/blur distribuito:
+#       BAND_WEIGHTS = {("HL",3):1.20,("LH",3):1.15,("HL",2):0.80,("LH",2):0.80}
+#       HVS_WEIGHTS  = [0.55,0.60,0.95,1.10,1.15,1.25,1.30]
+#       ACTIVITY_GAMMA = 0.60–0.70
+# ================================================================

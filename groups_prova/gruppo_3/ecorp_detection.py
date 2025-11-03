@@ -3,11 +3,6 @@ import numpy as np
 from scipy.signal import convolve2d
 import pywt
 import time
-import warnings
-
-#   disattivare i warmning di runtime (es. division by zero)
-warnings.filterwarnings("ignore", category=RuntimeWarning)
-np.seterr(all="ignore")
 
 FIXED_SEED = 42
 WAVELET = "db2"

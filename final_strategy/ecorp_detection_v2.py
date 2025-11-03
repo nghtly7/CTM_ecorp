@@ -14,7 +14,8 @@ WAVELET = "db2"
 LEVELS = 3
 MASK_IDX = [(0,1),(1,0),(1,1),(2,0),(0,2),(2,1),(1,2)]
 EPS = 1e-8
-TAU = 0.546026  # decision threshold
+# TAU = 0.546026  # decision threshold
+TAU = 0.55  # decision threshold
 MIN_DETECTION_TIME = 4.0 
 
 
@@ -28,7 +29,7 @@ _PN1 = _PN1 / (np.linalg.norm(_PN1) + EPS)
 # _DELTA_PN_NORM = _DELTA_PN / (np.linalg.norm(_DELTA_PN) + EPS)
 
 #! --- Allineamento ad embedding: HVS sulle PN ---
-HVS_WEIGHTS = np.array([0.55, 0.60, 0.95, 1.05, 1.05, 1.15, 1.15], dtype=np.float32)
+HVS_WEIGHTS = np.array([0.55, 0.60, 0.95, 1.10, 1.10, 1.25, 1.25], dtype=np.float32)
 
 _PN0_H = _PN0 * HVS_WEIGHTS
 _PN1_H = _PN1 * HVS_WEIGHTS
@@ -221,10 +222,17 @@ def extraction(original_path: str, test_path: str) -> np.ndarray:
                 # mid-band vectors
                 mb_o = np.array([Co[u, v] for (u, v) in MASK_IDX], dtype=np.float32)
                 mb_t = np.array([Ct[u, v] for (u, v) in MASK_IDX], dtype=np.float32)
+                
+                # misura di attività del blocco (come in embedding)
+                block_sigma = float(np.std(mb_o)) + EPS
+
+                # 🔸 SKIP: salta blocchi troppo piatti (come embedding)
+                if block_sigma < 1.5:   # ← usa la stessa soglia del tuo embedding
+                    continue
 
                 # delta and normalization by block std (as embedding equalization)
                 delta = mb_t - mb_o
-                block_sigma = float(np.std(mb_o)) + EPS
+                #* block_sigma = float(np.std(mb_o)) + EPS
                 delta_n = delta / block_sigma
 
                 # project onto normalized DELTA_PN
@@ -283,3 +291,55 @@ def detection(original_path: str, wm_path: str, attacked_path: str) -> tuple:
         
         
     return int(present_flag), float(wpsnr_val)
+
+
+# ================================================================
+# 🧭  PARAMETRI CRITICI DA MANTENERE COERENTI CON L’EMBEDDING
+# ================================================================
+# ⚠️  IMPORTANTE:
+#   Questi valori DEVONO essere identici a quelli usati nel file
+#   di embedding (es. ecorp_embedding_v2.py), altrimenti la detection
+#   non riconoscerà correttamente i bit del watermark.
+#
+# 📌 PARAMETRI DA TENERE ALLINEATI
+# ------------------------------------------------
+# 1️⃣ FIXED_SEED
+#     • È la chiave pseudo-casuale per generare le PN-sequences.
+#     • Deve essere esattamente lo stesso numero usato in embedding.
+#       → Se cambi SEED (es. per un watermark “diverso”), cambia qui.
+#
+# 2️⃣ MASK_IDX
+#     • Identifica i 7 coefficienti “mid-band” del blocco DCT 4×4.
+#     • Ordine e indici DEVONO essere identici all’embedding.
+#
+# 3️⃣ WAVELET e LEVELS
+#     • Nome della wavelet (es. 'db2') e numero di livelli (es. 3).
+#     • Devono coincidere per decomporre le stesse bande (HL3, LH3, HL2, LH2).
+#
+# 4️⃣ HVS_WEIGHTS
+#     • Pesi percettivi applicati ai 7 coefficienti DCT.
+#     • Se li modifichi in embedding per tuning (es. JPEG o rumore),
+#       copia gli stessi valori anche qui.
+#       → HVS_WEIGHTS = np.array([...], dtype=np.float32)
+#
+# 5️⃣ SOGLIA DI SKIP (blocchi piatti)
+#     • Nell’embedding viene usata una soglia su mb_std per saltare
+#       blocchi troppo omogenei (es. 1.5, 1.8, 2.0…).
+#     • Usa lo stesso valore anche qui:
+#           if block_sigma < 1.5: continue
+#
+# 6️⃣ ORDINE DELLE BANDE
+#     • Mantieni la stessa sequenza delle bande analizzate:
+#       (HL3, LH3, HL2, LH2)
+#     • Non cambiare l’ordine, né il modo in cui vengono iterate.
+#
+# ------------------------------------------------
+# ✅  Questi parametri garantiscono la coerenza statistica
+#     tra embedding e detection.
+#     I valori percettivi (BAND_WEIGHTS, ACTIVITY_GAMMA, ecc.)
+#     non servono in detection e possono differire.
+#
+#     In breve:
+#        SEED, MASK, HVS, wavelet, livelli e skip_threshold
+#        → Devono essere IDENTICI
+# ================================================================

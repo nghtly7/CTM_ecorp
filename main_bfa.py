@@ -38,7 +38,7 @@ except Exception as e:
 # ----------------------
 # Config (modifica se vuoi)
 # ----------------------
-INPUT_DIR = os.path.join(ROOT, "input_images/images_worst")          # dove prendere le immagini originali (.bmp)
+INPUT_DIR = os.path.join(ROOT, "input_images/sample-images")  # dove prendere le immagini originali (.bmp)
 OUT_WM_ROOT = os.path.join(ROOT, "watermarked_images")  # salvataggio watermarked per strategia
 OUT_ATT_ROOT = os.path.join(ROOT, "attacked_images")    # salvataggio attacked per strategia+image (debug)
 CSV_SUMMARY = os.path.join(ROOT, "attack_summary.csv")
@@ -52,7 +52,9 @@ WPSNR_SUCCESS_THRESH = 35.0
 # detection_import_path should point to a module exporting `detection`
 # if detection_import_path is None we try to import detection from same module as embedding
 STRATEGIES_CANDIDATES = [
-    ("paper_stronger_v2", "final_strategy.ecorp_embedding", "final_strategy.ecorp_detection"),
+    # ("final_strategy", "final_strategy.ecorp_embedding_v2", "final_strategy.ecorp_detection_v2"),
+    ("final_strategy", "final_strategy.ecorp_embedding_v2", "final_strategy.ecorp_detection_v2"),
+
 
 ]
 

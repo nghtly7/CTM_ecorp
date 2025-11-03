@@ -13,7 +13,7 @@ from math import sqrt
 from typing import List, Union, Dict, Any, Callable
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from scipy.signal import convolve2d, medfilt
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, median_filter
 from PIL import Image
 from skimage.transform import rescale
 from collections import OrderedDict, defaultdict
@@ -41,13 +41,17 @@ except ImportError:
 # -------------------------
 VERBOSE = False   # set True to enable per-attack debug prints
     
+#! da collocare
+def gaussian_feather_mask(h, w, by, bx, block, sigma=12):
+    """
+    Alias public-friendly per _gaussian_feather_mask — mantiene compatibilità con
+    chiamate che usano il nome senza underscore.
+    """
+    return _gaussian_feather_mask(h, w, by, bx, block, sigma=sigma)
+    
 # -------------------------
 # Attack implementations
 # -------------------------
-def clamp_uint8(x):
-    """Clamp a valori validi uint8 (0..255)."""
-    return np.clip(x, 0, 255).astype(np.uint8)
-
 def _awgn(img: np.ndarray, std: float, seed: int, mean: float = 0.0) -> np.ndarray:
     """Additive White Gaussian Noise (AWGN)."""
     np.random.seed(seed)
@@ -55,91 +59,6 @@ def _awgn(img: np.ndarray, std: float, seed: int, mean: float = 0.0) -> np.ndarr
     attacked = np.clip(attacked, 0, 255)
     return np.uint8(attacked)
 
-def adaptive_block_attack(img, block=32, attack_fn=None, attack_kwargs=None,
-                          prob_scale=(0.25, 0.75), invert_prob=False, seed=None,
-                          min_blocks_apply=1):
-    """
-    Attacco adattivo a blocchi basato sulla varianza.
-    - img: grayscale uint8 numpy array (512x512)
-    - block: dimensione del blocco (es 32)
-    - attack_fn: funzione che prende (patch, **attack_kwargs) e ritorna patch uint8
-    - attack_kwargs: dizionario parametri per attack_fn
-    - prob_scale: (min_prob, max_prob) mapping dalla varianza normalizzata
-    - invert_prob: se True allora alta varianza -> bassa probabilità (utile a seconda del watermark)
-    - seed: seed RNG per riproducibilità
-    - min_blocks_apply: numero minimo di blocchi che vogliamo attaccare (forza fallback se probs basse)
-    """
-    if attack_fn is None:
-        raise ValueError("attack_fn required for adaptive_block_attack")
-    if attack_kwargs is None:
-        attack_kwargs = {}
-
-    rng = np.random.RandomState(seed)
-    H, W = img.shape
-    out = img.copy()
-    nb_y = (H + block - 1) // block
-    nb_x = (W + block - 1) // block
-    var_map = np.zeros((nb_y, nb_x), dtype=np.float32)
-
-    # Calcolo varianza per blocco
-    for by in range(nb_y):
-        for bx in range(nb_x):
-            y0 = by * block
-            x0 = bx * block
-            y1 = min(H, y0 + block)
-            x1 = min(W, x0 + block)
-            patch = img[y0:y1, x0:x1]
-            var_map[by, bx] = float(patch.var())
-
-    # Normalizza var_map in [0,1]
-    if var_map.ptp() == 0:
-        norm = np.zeros_like(var_map)
-    else:
-        norm = (var_map - var_map.min()) / (var_map.ptp())
-
-    if invert_prob:
-        norm = 1.0 - norm
-
-    pmin, pmax = prob_scale
-    probs = pmin + (pmax - pmin) * norm  # probabilità per blocco
-
-    # Assicuriamoci di applicare almeno qualche blocco:
-    # Se la somma dei Bernoulli campionati è < min_blocks_apply, forziamo i blocchi con prob più alta.
-    applied_count = 0
-    for by in range(nb_y):
-        for bx in range(nb_x):
-            if rng.rand() < probs[by, bx]:
-                y0 = by * block
-                x0 = bx * block
-                y1 = min(H, y0 + block)
-                x1 = min(W, x0 + block)
-                patch = out[y0:y1, x0:x1]
-                new_patch = attack_fn(patch, **attack_kwargs)
-                out[y0:y1, x0:x1] = clamp_uint8(new_patch)
-                applied_count += 1
-
-    if applied_count < min_blocks_apply:
-        # forziamo i blocchi con probabilità più alta (ordinamento decrescente della prob)
-        flat_idx = np.argsort(probs.flatten())[::-1]  # indici decrescenti
-        i = 0
-        while applied_count < min_blocks_apply and i < flat_idx.size:
-            idx = flat_idx[i]
-            by = idx // nb_x
-            bx = idx % nb_x
-            y0 = by * block
-            x0 = bx * block
-            y1 = min(H, y0 + block)
-            x1 = min(W, x0 + block)
-            # controlla se già applicato: confronta il patch esterno con l'originale per vedere se è stato modificato
-            # (semplice check: se identico → non applicato)
-            before = out[y0:y1, x0:x1]
-            # applichiamo comunque
-            new_patch = attack_fn(before, **attack_kwargs)
-            out[y0:y1, x0:x1] = clamp_uint8(new_patch)
-            applied_count += 1
-            i += 1
-
-    return out
 
 def _blur_gauss(img: np.ndarray, sigma: list) -> np.ndarray:
     """Gaussian blur."""
@@ -511,6 +430,31 @@ def find_best_attack(
             except Exception as e:
                 print(f"Error processing result for type {attack_type_id}: {e}")
 
+            # --- TRY Greedy top-K local attack if no global single/paired attack succeeded ---
+    if best_attack is None:
+        print("[Main] No successful global attack found — trying Greedy top-K local attack...")
+        try:
+            success, wpsnr_local, info = greedy_top_k_local_attack(
+                original_path,
+                watermarked_path,
+                adv_detection_func,
+                block=64,
+                K=12,
+                wpsnr_thresh=WPSNR_TRESHHOLD,
+                max_trials_per_patch=2,
+                logger=print
+            )
+            if success:
+                # we found a local solution; save as a pseudo-attack description
+                best_attack = {
+                    "names": ["greedy_local"],
+                    "params": [info["steps"]],  # store steps for log / reproducibility
+                }
+                best_wpsnr = float(wpsnr_local)
+                print(f"  [Main] Greedy local attack SUCCESS with WPSNR={best_wpsnr:.2f}")
+        except Exception as e:
+            print(f"[Main] Greedy attack failed with error: {e}")
+            
     if best_attack is None:
         print("\n--- Brute-Force Complete ---")
         print("No successful attack found that meets WPSNR >=", WPSNR_TRESHHOLD, " criteria.")
@@ -527,6 +471,283 @@ def find_best_attack(
 # -------------------------
 # Logging utilities
 # -------------------------
+# --- BEGIN: Greedy top-k local attack integration ---
+import tempfile
+import itertools
+
+def _detector_wrapper_write_and_call(adv_detection_func, orig_path, wm_path, candidate_img):
+    """
+    Save candidate_img to temp file and call adv_detection_func(original, watermarked, attacked)
+    Returns (found:int, wpsnr:float, tmp_path:str)
+    """
+    fd, tmp_path = tempfile.mkstemp(suffix=".bmp")
+    os.close(fd)
+    try:
+        cv2.imwrite(tmp_path, candidate_img)
+        # adv_detection_func expects (original_path, watermarked_path, attacked_path)
+        found, wpsnr = adv_detection_func(orig_path, wm_path, tmp_path)
+        return int(found), float(wpsnr), tmp_path
+    except Exception as e:
+        # on error, cleanup and rethrow
+        if os.path.exists(tmp_path):
+            try: os.remove(tmp_path)
+            except Exception: pass
+        raise
+
+def block_scores(img: np.ndarray, block: int = 64):
+    """Compute simple combined score per block: var + entropy + midband DCT energy."""
+    h, w = img.shape
+    results = []
+    for by in range(0, h, block):
+        for bx in range(0, w, block):
+            patch = img[by:by+block, bx:bx+block]
+            if patch.size == 0:
+                continue
+            var = float(np.std(patch))
+            hist = np.bincount(patch.flatten(), minlength=256).astype(np.float32)
+            prob = hist / (patch.size + 1e-12)
+            prob = np.clip(prob, 1e-12, 1.0)
+            ent = -float(np.sum(prob * np.log2(prob)))
+            # midband DCT energy (approx)
+            dct_energy = 0.0
+            ph, pw = patch.shape
+            if ph >= 8 and pw >= 8:
+                for y in range(0, ph - 7, 8):
+                    for x in range(0, pw - 7, 8):
+                        b8 = patch[y:y+8, x:x+8].astype(np.float32) - 128.0
+                        d = cv2.dct(b8)
+                        mid = d[1:5, 1:5]
+                        dct_energy += float(np.sum(np.abs(mid)))
+            else:
+                dct_energy = float(np.sum(np.abs(cv2.Laplacian(patch.astype(np.float32), cv2.CV_32F))))
+            results.append(((by, bx), var, ent, dct_energy))
+    if not results:
+        return []
+    arr_var = np.array([r[1] for r in results], dtype=float)
+    arr_ent = np.array([r[2] for r in results], dtype=float)
+    arr_dct = np.array([r[3] for r in results], dtype=float)
+    def _norm(x):
+        rng = np.ptp(x)
+        if rng < 1e-9:
+            return np.zeros_like(x)
+        return (x - x.min()) / (rng + 1e-12)
+    score = 0.4 * _norm(arr_var) + 0.3 * _norm(arr_dct) + 0.3 * _norm(arr_ent)
+    scored = [ (results[i][0], float(score[i])) for i in range(len(results)) ]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return scored
+
+def _gaussian_feather_mask(h, w, by, bx, block, sigma=12):
+    mask = np.zeros((h,w), dtype=np.float32)
+    y0, y1 = by, min(by+block, h)
+    x0, x1 = bx, min(bx+block, w)
+    mask[y0:y1, x0:x1] = 1.0
+    mask = gaussian_filter(mask, sigma=sigma)
+    if mask.max() > 0:
+        mask = mask / mask.max()
+    return mask
+
+def apply_local_attack(img, by, bx, block, attack_type='awgn', params=None, blend_sigma=12):
+    if params is None:
+        params = {}
+
+    h,w = img.shape
+    attacked = img.astype(np.float32).copy()
+
+    y0,y1 = by, min(by+block, h)
+    x0,x1 = bx, min(bx+block, w)
+    patch = img[y0:y1, x0:x1].astype(np.float32)
+
+    # compute replacement patch (same shape as patch)
+    if attack_type == 'awgn':
+        sigma = float(params.get('sigma', 6.0))
+        replacement_patch = patch + np.random.normal(0, sigma, patch.shape)
+    elif attack_type == 'blur':
+        sigma = float(params.get('sigma', 1.0))
+        ksize = max(3, int(2*round(3*sigma)+1))
+        replacement_patch = cv2.GaussianBlur(patch.astype(np.float32), (ksize,ksize), sigmaX=sigma, borderType=cv2.BORDER_REFLECT)
+    elif attack_type == 'sharpen':
+        amount = float(params.get('amount', 1.0))
+        sigma = float(params.get('sigma', 1.0))
+        ksize = max(3, int(2*round(3*sigma)+1))
+        blurred = cv2.GaussianBlur(patch.astype(np.float32), (ksize,ksize), sigmaX=sigma, borderType=cv2.BORDER_REFLECT)
+        replacement_patch = patch + amount * (patch - blurred)
+    elif attack_type == 'median':
+        k = int(params.get('k', 3))
+        if k % 2 == 0: k += 1
+        replacement_patch = median_filter(patch, size=k, mode='reflect')
+    elif attack_type == 'resize':
+        scale = float(params.get('scale', 0.9))
+        ph, pw = patch.shape
+        new_h = max(1, int(round(ph * scale)))
+        new_w = max(1, int(round(pw * scale)))
+        small = cv2.resize(patch.astype(np.float32), (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+        up = cv2.resize(small, (pw, ph), interpolation=cv2.INTER_LINEAR)
+        replacement_patch = up
+    elif attack_type == 'jpeg':
+        qf = int(params.get('qf', 85))
+        patch_u8 = np.uint8(np.clip(patch,0,255))
+        result, encimg = cv2.imencode('.jpg', patch_u8, [int(cv2.IMWRITE_JPEG_QUALITY), qf])
+        if result:
+            dec = cv2.imdecode(encimg, cv2.IMREAD_GRAYSCALE).astype(np.float32)
+            replacement_patch = dec
+        else:
+            replacement_patch = patch
+    else:
+        replacement_patch = patch
+
+    # Create a full-size replacement image and copy the replacement_patch into it
+    full_replacement = np.zeros_like(attacked, dtype=np.float32)
+    full_replacement[y0:y1, x0:x1] = replacement_patch
+
+    # Build the full-size mask and blend
+    mask = gaussian_feather_mask(h, w, by, bx, block, sigma=blend_sigma)
+    # ensure mask has same dims (h,w)
+    if mask.ndim == 2:
+        blend_mask = mask
+    else:
+        blend_mask = mask.squeeze()
+    attacked = attacked * (1.0 - blend_mask) + full_replacement * blend_mask
+    attacked = np.clip(attacked, 0, 255).astype(np.uint8)
+    return attacked
+
+def _apply_local_attack_to_image(img, by, bx, block, attack_type, params, blend_sigma=8):
+    h,w = img.shape
+    attacked_img = img.astype(np.float32).copy()
+    y0,y1 = by, min(by+block, h)
+    x0,x1 = bx, min(bx+block, w)
+    patch = img[y0:y1, x0:x1].astype(np.float32)
+
+    # produce replacement_patch (same shape as patch)
+    if attack_type == 'awgn':
+        std, seed = params.get('std', 6.0), int(params.get('seed', 42))
+        rng = np.random.RandomState(seed)
+        replacement_patch = patch + rng.normal(0, std, patch.shape)
+    elif attack_type == 'blur':
+        sigma = params.get('sigma', 1.0)
+        # if you have a primitive that expects uint8 or whole-image, adapt as needed.
+        replacement_patch = _blur_gauss(patch, sigma)  # ensure _blur_gauss accepts patch
+    elif attack_type == 'median':
+        k = int(params.get('k', 3))
+        replacement_patch = _blur_median(patch, [k, k])
+    elif attack_type == 'resize':
+        scale = float(params.get('scale', 0.95))
+        # _resizing might expect uint8 full image; adapt to patch:
+        replacement_patch = _resizing(patch.astype(np.uint8), scale).astype(np.float32)
+    elif attack_type == 'jpeg':
+        qf = int(params.get('qf', 90))
+        replacement_patch = _jpeg_compression(patch.astype(np.uint8), QF=qf).astype(np.float32)
+    elif attack_type == 'sharpen':
+        sigma = float(params.get('sigma', 1.0)); alpha = float(params.get('alpha', 1.0))
+        replacement_patch = _sharpening(patch.astype(np.uint8), sigma=sigma, alpha=alpha).astype(np.float32)
+    else:
+        replacement_patch = patch
+
+    # place replacement_patch into full-size replacement image
+    full_replacement = np.zeros_like(attacked_img, dtype=np.float32)
+    full_replacement[y0:y1, x0:x1] = replacement_patch
+
+    mask = _gaussian_feather_mask(h, w, by, bx, block, sigma=blend_sigma)
+    attacked_img = attacked_img * (1.0 - mask) + (full_replacement * mask)
+    attacked_img = np.clip(attacked_img, 0, 255).astype(np.uint8)
+    return attacked_img
+
+
+def greedy_top_k_local_attack(original_path: str, watermarked_path: str, adv_detection_func: Callable,
+                              block: int = 64, K: int = 12, wpsnr_thresh: float = WPSNR_TRESHHOLD,
+                              max_trials_per_patch: int = 3, logger=print):
+    """
+    Greedy top-K local attack wrapper.
+    Returns (success_bool, wpsnr, best_info_dict) where best_info_dict contains 'img' and 'steps' (list).
+    """
+    wm_img = cv2.imread(watermarked_path, cv2.IMREAD_GRAYSCALE)
+    if wm_img is None:
+        raise FileNotFoundError(f"Watermarked not found: {watermarked_path}")
+    orig_path = original_path
+    scores = block_scores(wm_img, block=block)
+    top_blocks = [pos for (pos, sc) in scores[:K]]
+
+    # default attacks_order (list of (atype, params_candidates))
+    attacks_order = [
+        ('awgn', [{'std': s, 'seed': sd} for s, sd in [(4.0,123),(6.0,42),(8.0,99)]]),
+        ('blur', [{'sigma':[s,s]} for s in [0.8,1.4,2.2]]),
+        ('median', [{'k':k} for k in [3,5]]),
+        ('resize', [{'scale':s} for s in [0.98,0.95,0.9]]),
+        ('jpeg', [{'qf':q} for q in [90,85,80]]),
+        ('sharpen', [{'sigma':1.0,'alpha':a} for a in [0.8,1.2]])
+    ]
+
+    current_img = wm_img.copy()
+    steps = []
+
+    # quick pre-check
+    found0, w0, tmp = _detector_wrapper_write_and_call(adv_detection_func, orig_path, watermarked_path, current_img)
+    if found0 == 0 and w0 >= wpsnr_thresh:
+        return True, w0, {'img': current_img, 'steps': steps}
+
+    # iterate top blocks
+    for (by, bx) in top_blocks:
+        best_local = None
+        for atype, candidates in attacks_order:
+            # limit trials per_patch
+            for cand in candidates[:max_trials_per_patch]:
+                candidate_img = _apply_local_attack_to_image(current_img, by, bx, block, atype, cand)
+                try:
+                    found_c, wpsnr_c, tmp_path = _detector_wrapper_write_and_call(adv_detection_func, orig_path, watermarked_path, candidate_img)
+                except Exception as e:
+                    if logger: logger(f"[greedy] detector call failed: {e}")
+                    continue
+                # cleanup tmp
+                try:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                except Exception:
+                    pass
+
+                info = {'patch':(by,bx), 'atype':atype, 'params':cand, 'found':found_c, 'wpsnr':wpsnr_c}
+                if logger: logger(f"[greedy] test patch={by,bx} atype={atype} params={cand} -> found={found_c} wpsnr={wpsnr_c:.2f}")
+                if best_local is None:
+                    best_local = (found_c, wpsnr_c, candidate_img, info)
+                else:
+                    b_found, b_wpsnr = best_local[0], best_local[1]
+                    # prefer lower found, then higher wpsnr
+                    if found_c < b_found or (found_c == b_found and wpsnr_c > b_wpsnr):
+                        best_local = (found_c, wpsnr_c, candidate_img, info)
+
+                # immediate accept if successful
+                if best_local and best_local[0] == 0 and best_local[1] >= wpsnr_thresh:
+                    break
+            if best_local and best_local[0] == 0 and best_local[1] >= wpsnr_thresh:
+                break
+
+        # commit best_local
+        if best_local:
+            bfnd, bw, bimg, binfo = best_local
+            # accept if it improves found OR keeps same found but improves wpsnr
+            cur_found, cur_wpsnr, _ = _detector_wrapper_write_and_call(adv_detection_func, orig_path, watermarked_path, current_img)
+            if bfnd < cur_found or (bfnd == cur_found and bw >= cur_wpsnr - 0.5):
+                current_img = bimg
+                steps.append(binfo)
+                if logger: logger(f"[greedy] accepted patch {binfo}")
+        # test global
+        found_g, wpsnr_g, tmp_g = _detector_wrapper_write_and_call(adv_detection_func, orig_path, watermarked_path, current_img)
+        try:
+            if os.path.exists(tmp_g): os.remove(tmp_g)
+        except Exception:
+            pass
+        if logger: logger(f"[greedy] after commit -> found={found_g} wpsnr={wpsnr_g:.2f}")
+        if found_g == 0 and wpsnr_g >= wpsnr_thresh:
+            return True, wpsnr_g, {'img': current_img, 'steps': steps}
+
+    # no success
+    found_f, wpsnr_f, tmpf = _detector_wrapper_write_and_call(adv_detection_func, orig_path, watermarked_path, current_img)
+    try:
+        if os.path.exists(tmpf): os.remove(tmpf)
+    except Exception:
+        pass
+    return (found_f == 0 and wpsnr_f >= wpsnr_thresh), wpsnr_f, {'img': current_img, 'steps': steps}
+# --- END: Greedy top-k local attack integration ---
+
+
 def _format_params_for_log(names: Any, params: Any) -> str:
     """Format attack names and parameters for CSV logging."""
     names_list = [names] if isinstance(names, str) else list(names)

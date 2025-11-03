@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import cv2
+import shutil
 
 from wpsnr import wpsnr
 
@@ -14,7 +15,12 @@ from attacks.jpeg_attack import attacks as jpeg_attacks
 
 # cartelle (relativamente alla posizione di questo main)
 INPUT_DIR = os.path.join("input_images/images")
+# cartella dove mettere i watermarked generati da embedding (o dove copiamo quelli forniti)
 WM_DIR    = os.path.join("watermarked_images")
+# cartella opzionale: immagini già watermarkate fornite dall'utente — se presente per un file,
+# salta la fase di embedding e usa questa immagine come wm_path
+WM_INPUT_DIR = os.path.join("watermarked_input")
+
 ATT_DIR   = os.path.join("attacked_images")   # qui mettiamo sottocartelle per AWGN e BLUR
 
 
@@ -65,6 +71,10 @@ def main():
 
     ensure_dir(WM_DIR)
     ensure_dir(ATT_DIR)
+    # non è obbligatorio che l'utente abbia una cartella di watermarked input:
+    # se non esiste, la funzione continuerà a generare i watermark via embedding
+    # ma la creiamo comunque così l'utente sa dove metterli
+    ensure_dir(WM_INPUT_DIR)
 
     valid_exts = (".bmp")
     if not os.path.isdir(INPUT_DIR):
@@ -89,30 +99,65 @@ def main():
         print(f"🔹 Processing: {img_name}")
 
         # ---------------------------
-        # 1) EMBEDDING
+        # Decide se SKIPPARE embedding (se esiste una watermarked image fornita dall'utente)
         # ---------------------------
-        try:
-            Iw = embedding(input_path)   # ritorna array uint8 512x512
-        except Exception as e:
-            print(f"  ERROR embedding {img_name}: {e}")
-            continue
-
-        # compute and print WPSNR between original e watermarked
-        try:
-            orig_gray = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
-            wpsnr_val = wpsnr(orig_gray, Iw)
-        except Exception as e:
-            print(f"  ERROR computing WPSNR per {img_name}: {e}")
-            wpsnr_val = float('nan')
-        print(f"    Watermark embedded. WPSNR between original and watermarked: {wpsnr_val:.2f} dB")
-
-        # save watermarked image
-        cv2.imwrite(wm_path, Iw)
+        provided_wm_candidate = os.path.join(WM_INPUT_DIR, img_name)
+        skip_embedding = False
+        if os.path.isfile(provided_wm_candidate):
+            # user provided a watermarked image with same filename in WM_INPUT_DIR:
+            # use that image as wm_path and copy it into WM_DIR for record
+            try:
+                shutil.copyfile(provided_wm_candidate, wm_path)
+                skip_embedding = True
+                print("    -> Trovata immagine watermarkata in 'watermarked_input/' - salto embedding e uso quella immagine.")
+            except Exception as e:
+                print(f"    ERROR copying provided watermarked image: {e}")
+                print("    -> Procedo con embedding (fallback).")
+                skip_embedding = False
 
         # ---------------------------
-        # 2) AWGN attacks on the WATERMARKED image (independent)
+        # 1) EMBEDDING (solo se non abbiamo un'immagine watermarkata fornita)
         # ---------------------------
-        """
+        if not skip_embedding:
+            try:
+                Iw = embedding(input_path)   # ritorna array uint8 512x512
+            except Exception as e:
+                print(f"  ERROR embedding {img_name}: {e}")
+                continue
+
+            # compute and print WPSNR between original e watermarked
+            try:
+                orig_gray = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
+                wpsnr_val = wpsnr(orig_gray, Iw)
+            except Exception as e:
+                print(f"  ERROR computing WPSNR per {img_name}: {e}")
+                wpsnr_val = float('nan')
+            print(f"    Watermark embedded. WPSNR between original and watermarked: {wpsnr_val:.2f} dB")
+
+            # save watermarked image (in WM_DIR)
+            try:
+                cv2.imwrite(wm_path, Iw)
+            except Exception as e:
+                print(f"    ERROR saving watermarked image {wm_path}: {e}")
+                continue
+        else:
+            # Se abbiamo saltato embedding: carichiamo l'immagine fornita e calcoliamo WPSNR rispetto all'originale
+            try:
+                orig_gray = cv2.imread(input_path, cv2.IMREAD_GRAYSCALE)
+                provided_wm_gray = cv2.imread(wm_path, cv2.IMREAD_GRAYSCALE)
+                wpsnr_val = wpsnr(orig_gray, provided_wm_gray)
+            except Exception as e:
+                print(f"  ERROR computing WPSNR per {img_name} (provided wm): {e}")
+                wpsnr_val = float('nan')
+            print(f"    Usata immagine watermarkata fornita. WPSNR between original and provided watermarked: {wpsnr_val:.2f} dB")
+
+        # ---------------------------
+        # (il resto del flusso con attacchi e detection era commentato nel file originale;
+        # non ho modificato la logica degli attacchi: se vuoi che esegua gli attacchi
+        # abilita / decommenta la sezione sotto)
+        # ---------------------------
+
+        """"""
         base_noext = os.path.splitext(img_name)[0]
         per_img_att_dir_awgn = os.path.join(ATT_DIR, base_noext, "awgn")
         ensure_dir(per_img_att_dir_awgn)
@@ -222,7 +267,7 @@ def main():
             print(f"  ==> ATTACK SUCCESSFUL (AWGN o BLUR) for at least one level on {img_name}\n")
         else:
             print(f"  ==> No successful attack found (wpsnr >= {WPSNR_SUCCESS_THRESH} & watermark destroyed) per {img_name}\n")
-        """
+        """"""
     # Report totale al termine della pipeline
     print("🎯 Pipeline completata.")
     print(f"🔢 Totale attacchi con WPSNR < {WPSNR_COUNTER_THRESH:.1f} dB: {total_attacks_with_low_wpsnr}")
