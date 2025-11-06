@@ -1,10 +1,8 @@
 images/
-sample-images/
 attacked_images*/
 attack_results/*.bmp
 groups/
 watermarked_images/
 attacked_results/
 __pycache__/
-
 .DS_Store
